@@ -16,7 +16,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 
 - **Etapa:** 0, definición de reglas.
 - **Código:** todavía no hay. No hay entorno Python armado.
-- **Bloqueante:** las reglas tienen preguntas abiertas en `docs/REGLAS.md`.
+- **Bloqueante:** las reglas están en `1.0-rc`; quedan 3 preguntas abiertas al final de `docs/REGLAS.md`.
 - **Próximo paso:** cerrar las reglas con Facu; después, el motor del juego con tests.
 
 ## Reglas de trabajo

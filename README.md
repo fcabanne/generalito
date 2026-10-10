@@ -6,7 +6,7 @@ No se le enseñan estrategias: se le dan las reglas y una recompensa, simula mil
 
 ## Estado
 
-🟡 **Etapa 0: definición de reglas.** Todavía no hay código. Las reglas exactas del juego son lo único que bloquea todo lo demás. Ver [`docs/REGLAS.md`](docs/REGLAS.md).
+🟡 **Etapa 0: definición de reglas.** Todavía no hay código. Las reglas están casi cerradas (versión `1.0-rc`); quedan 3 preguntas abiertas. Ver [`docs/REGLAS.md`](docs/REGLAS.md).
 
 ## Hoja de ruta
 
@@ -19,7 +19,7 @@ No se le enseñan estrategias: se le dan las reglas y una recompensa, simula mil
 ## Documentación
 
 - [`docs/PRD.md`](docs/PRD.md): el documento de producto original (visión, alcance, aprendizaje, registro, snapshots, riesgos).
-- [`docs/REGLAS.md`](docs/REGLAS.md): las reglas del juego, a completar. Fuente de verdad del motor.
+- [`docs/REGLAS.md`](docs/REGLAS.md): las reglas del juego. Fuente de verdad del motor.
 - [`docs/DECISIONES.md`](docs/DECISIONES.md): registro de decisiones tomadas (y por qué).
 - [`AGENTS.md`](AGENTS.md): contexto y convenciones para sesiones de agentes de código (Claude Code y otros).
 

@@ -1,79 +1,174 @@
 # Reglas de la generala de 4 columnas
 
-> **Estado: BORRADOR, sin confirmar.** Este documento es la fuente de verdad del motor del juego. Nada del motor se implementa hasta que la sección correspondiente esté marcada como ✅ confirmada.
+> **Estado: confirmadas por Facu, salvo lo marcado con ❓ en [Preguntas abiertas](#preguntas-abiertas).** Este documento es la fuente de verdad del motor del juego.
 >
-> Lo marcado como *hipótesis* es una suposición razonable para arrancar la conversación, no una regla.
+> Está escrito para que el motor se pueda implementar sin interpretar nada. Si algo no está acá, no es regla: hay que preguntar.
 
-Versión de reglas: `0.0-borrador` (cada cambio confirmado sube la versión; los snapshots de la red guardan con qué versión se entrenaron).
+Versión de reglas: `1.0-rc` (pasa a `1.0` cuando se cierren las preguntas abiertas).
 
-## Básico ✅
+## 1. Jugadores
 
-- 2 jugadores (en la v1, uno solo).
-- 5 dados de 6 caras.
-- Hasta 3 tiros por turno. Entre tiros se eligen qué dados guardar.
-- La planilla tiene 4 columnas: **baja**, **sube**, **desordenada** y **servida**. Todos los juegos se anotan en cada columna.
+- Juegan N "bandos" (N ≥ 1). Un bando es un jugador solo o un equipo. Formatos habituales: solo, 1v1, 2v2, 1v1v1, 2v2v2, 1v1v1v1v1.
+- Cada bando tiene **una sola planilla**. En un equipo, los integrantes comparten la planilla y se turnan para tirar. Quién decide la jugada dentro del equipo no importa para las reglas: para el motor, **un equipo es igual a un jugador**.
+- Para elegir quién empieza, cada bando tira 1 dado y empieza el más alto.
+- Los bandos juegan por turnos alternados, de a un turno completo por vez.
 
-## Juegos (filas de la planilla) ❓
+## 2. Dados y turno
 
-*Hipótesis:* las 11 filas de la generala clásica, lo que da 4 × 11 = 44 casilleros.
+- Se juega con 5 dados de 6 caras.
+- Un turno tiene entre 1 y 3 tiros:
+  1. **Tiro 1:** se tiran los 5 dados.
+  2. Después de cada tiro, el jugador elige entre:
+     - **Anotar:** terminar el turno y anotar (ver §4).
+     - **Volver a tirar** (solo si hizo menos de 3 tiros): elige qué subconjunto de dados guardar (de 0 a 4) y tira el resto. Los dados guardados en un tiro **no quedan fijos**: en el tiro siguiente se puede volver a tirar cualquiera de ellos.
+  3. Después del tiro 3, el jugador tiene que anotar.
+- **En cada turno se anota exactamente una casilla**, con un puntaje o con una X (tachar).
 
-| Juego | Condición | Puntaje (hipótesis) | Confirmado |
+### 2.1 Tiro servido
+
+Un tiro es **servido** si en ese tiro se tiraron los 5 dados juntos (o sea, no se guardó ninguno). El tiro 1 siempre es servido. El tiro 2 o el 3 son servidos si se volvieron a tirar los 5, sin importar qué se guardó antes.
+
+Lo que importa para anotar en la columna Servida es si **el último tiro del turno** (el que dejó los dados que se anotan) fue servido.
+
+Ejemplo: en el tiro 1 guardo 2 dados. En el tiro 2 no sale lo que buscaba. En el tiro 3 tiro los 5 y anoto ese resultado: es servido.
+
+## 3. Planilla
+
+### 3.1 Categorías (filas), en orden de bajada
+
+| # | Categoría | Se anota con dados | Se puede tachar |
 | --- | --- | --- | --- |
-| 1 | — | suma de los 1 | ❓ |
-| 2 | — | suma de los 2 | ❓ |
-| 3 | — | suma de los 3 | ❓ |
-| 4 | — | suma de los 4 | ❓ |
-| 5 | — | suma de los 5 | ❓ |
-| 6 | — | suma de los 6 | ❓ |
-| Escalera | 1-2-3-4-5 o 2-3-4-5-6 (¿3-4-5-6-1?) | 20 (¿25 servida?) | ❓ |
-| Full | trío + par | 30 (¿35 servido?) | ❓ |
-| Póker | 4 iguales | 40 (¿45 servido?) | ❓ |
-| Generala | 5 iguales | 50 | ❓ |
-| Doble generala | segunda generala | 100 | ❓ |
+| 1 | 1 | sí | sí |
+| 2 | 2 | sí | sí |
+| 3 | 3 | sí | sí |
+| 4 | 4 | sí | sí |
+| 5 | 5 | sí | sí |
+| 6 | 6 | sí | sí |
+| — | **Bonus** | no (se calcula) | no |
+| 7 | Escalera 1-5 | sí | sí |
+| 8 | Escalera 2-6 | sí | sí |
+| 9 | Full | sí | sí |
+| 10 | Póker | sí | sí |
+| 11 | Menor | sí | sí |
+| 12 | Mayor | sí | sí |
+| 13 | Generala | sí | sí |
 
-Preguntas:
+Hay 13 categorías anotables más el Bonus, que es una fila calculada y no una casilla.
 
-- [ ] ¿Son estas las filas? ¿Hay alguna más o alguna menos?
-- [ ] ¿Cuánto vale cada juego? ¿Vale distinto según la columna?
-- [ ] ¿Hay bonus (por ejemplo, por sumar X en los números)?
-- [ ] ¿Qué cuenta como escalera? ¿El 1 hace de "comodín" o de 7?
+### 3.2 Columnas
 
-## Columnas ❓
+| Columna | Restricción para anotar |
+| --- | --- |
+| **Baja** | Solo la próxima casilla libre en el orden de bajada: 1, 2, 3, 4, 5, 6, Escalera 1-5, Escalera 2-6, Full, Póker, Menor, Mayor, Generala. |
+| **Sube** | Solo la próxima casilla libre en el orden inverso: Generala, Mayor, Menor, Póker, Full, Escalera 2-6, Escalera 1-5, 6, 5, 4, 3, 2, 1. |
+| **Desordenada** | Cualquier casilla libre. |
+| **Servida** | Cualquier casilla libre, pero solo si el último tiro del turno fue servido (§2.1). |
 
-| Columna | Hipótesis | Confirmado |
+- El Bonus no ocupa lugar en el orden de Baja ni de Sube: se saltea.
+- En cada turno se puede anotar en **cualquier columna**, siempre que se cumpla su restricción.
+- Una planilla tiene 13 × 4 = **52 casillas**. Cada bando juega exactamente 52 turnos.
+
+## 4. Anotar
+
+Al terminar el turno, el jugador elige una casilla libre que cumpla la restricción de su columna (§3.2) y le asigna:
+
+- **Un puntaje**, si los dados cumplen la condición de la categoría (§5). Ese puntaje es el que dice la tabla; no se elige el valor.
+- **Una X (tachar)**, en cualquier caso. Una X vale 0 a todos los efectos.
+
+Reglas:
+
+- El jugador elige **libremente** dónde anotar entre todas las opciones legales. Por ejemplo, con 5-5-5-2-2 puede anotar Full (45), 5 (15), 2 (4), Menor o Mayor (19, si se cumple la restricción) o tachar cualquier casilla habilitada.
+- Se puede tachar **aunque haya algo para anotar**. Es parte de la estrategia (por ejemplo, para destrabar Baja o Sube).
+- Anotar 0 en una categoría de números (por ejemplo, en "1" sin ningún 1) es equivalente a tachar. Por costumbre se pone X.
+- Los dados no se pueden anotar en una categoría cuya condición no cumplen. En ese caso la única opción para esa casilla es tachar.
+
+## 5. Puntaje de cada categoría
+
+Notación: `dados` son los 5 valores finales del turno y `cuenta(v)` es cuántos dados muestran el valor `v`.
+
+| Categoría | Condición | Puntaje |
 | --- | --- | --- |
-| Baja | Se llena en orden obligatorio, de arriba hacia abajo (1 → doble generala) | ❓ |
-| Sube | Se llena en orden obligatorio, de abajo hacia arriba (doble generala → 1) | ❓ |
-| Desordenada | Se anota libremente en cualquier casillero libre | ❓ |
-| Servida | Solo se puede anotar con lo que salió en el **primer tiro** | ❓ |
+| 1 a 6 (valor `v`) | ninguna | `v × cuenta(v)` (puede ser 0) |
+| Escalera 1-5 | los dados son exactamente {1, 2, 3, 4, 5}, en cualquier orden | 20 |
+| Escalera 2-6 | los dados son exactamente {2, 3, 4, 5, 6}, en cualquier orden | 20 |
+| Full | existe `a` con `cuenta(a) = 3` y existe `b ≠ a` con `cuenta(b) = 2` | `30 + 3 × a` |
+| Póker | existe `a` con `cuenta(a) = 4` (el quinto dado es distinto) | `40 + 4 × a` |
+| Menor | la suma cumple la restricción Menor/Mayor (§5.1) | suma de los 5 dados |
+| Mayor | la suma cumple la restricción Menor/Mayor (§5.1) | suma de los 5 dados |
+| Generala | `cuenta(a) = 5` para algún `a` | `50 + 5 × a` |
 
-Preguntas:
+- **Cinco iguales no son Full ni Póker**, solo Generala (y sirven para un número, Menor o Mayor).
+- Sacar algo servido **no da puntos extra**.
+- La generala servida se anota como cualquier otra y **no gana la partida**.
 
-- [ ] En baja/sube, ¿el orden es estricto (solo el próximo casillero) o hay alguna flexibilidad?
-- [ ] En cada turno, ¿se elige libremente en qué columna anotar?
-- [ ] Servida: ¿es exactamente "con el primer tiro"? ¿Se puede anotar un número (ej. los 4) en servida aunque no sea un juego?
-- [ ] ¿Hay que anunciar antes de tirar en qué columna se va a anotar?
+### 5.1 Restricción Menor / Mayor
 
-## Tachar ❓
+Se aplica **dentro de cada columna** por separado:
 
-- [ ] ¿Se puede tachar (anotar 0) en cualquier casillero? ¿Hay restricciones por columna?
-- [ ] ¿Es obligatorio anotar algo en cada turno? (*hipótesis:* sí; si no hay nada útil, se tacha).
+- Si la casilla Mayor de esa columna tiene un **puntaje**, el Menor tiene que ser **estrictamente menor** que ese puntaje.
+- Si la casilla Menor de esa columna tiene un **puntaje**, el Mayor tiene que ser **estrictamente mayor** que ese puntaje.
+- Si la otra casilla está libre o tachada, no hay restricción.
+- Si la restricción no se cumple, esa casilla solo se puede tachar.
 
-## Victoria, puntaje final y empates ❓
+Ejemplo: en Desordenada se anota Menor = 18. Después, Mayor solo admite sumas de 19 a 30. Si en cambio el Menor se hubiera tachado, el Mayor admitiría cualquier suma.
 
-- [ ] ¿El puntaje final es la suma de los 44 casilleros?
-- [ ] ¿Hay victoria instantánea (por ejemplo, generala servida)? ¿En qué columna aplica?
-- [ ] ¿Cómo se desempata?
-- [ ] ¿La partida termina cuando ambos completan la planilla? ¿Juegan la misma cantidad de turnos?
+## 6. Puntaje de la planilla
 
-## Casos raros ❓
+Para cada columna:
 
-- [ ] ¿Qué pasa si se saca generala con la casilla de generala ya ocupada (o tachada)?
-- [ ] ¿Doble generala requiere tener la generala anotada (no tachada) en esa misma columna?
-- [ ] Cualquier otra regla de la casa que se juegue "porque sí" hace 20 años.
+1. `suma_numeros` = suma de las casillas 1 a 6 (cada X vale 0).
+2. `bonus` = `suma_numeros + 30` si `suma_numeros ≥ 60`; si no, `bonus = suma_numeros`.
+3. `subtotal_columna` = `bonus` + Escalera 1-5 + Escalera 2-6 + Full + Póker + Menor + Mayor + Generala (cada X vale 0).
+
+Las casillas 1 a 6 **no se suman aparte**: ya están dentro del Bonus.
+
+`total` = suma de los subtotales de las 4 columnas.
+
+Ejemplos de Bonus: si de 1 a 6 se suma 62, el Bonus vale 92. Si se suma 60, vale 90. Si se suma 59, vale 59.
+
+### 6.1 Máximos teóricos (útiles para normalizar recompensas)
+
+| Concepto | Máximo |
+| --- | --- |
+| Bonus | 105 + 30 = 135 (cinco de cada número) |
+| Escaleras | 20 + 20 = 40 |
+| Full | 48 (6-6-6-5-5) |
+| Póker | 64 (cuatro 6) |
+| Menor + Mayor | 29 + 30 = 59 |
+| Generala | 80 (cinco 6) |
+| **Columna** | **426** |
+| **Planilla** | **1704** |
+
+## 7. Fin de la partida
+
+- La partida termina cuando todos los bandos completaron sus 52 casillas.
+- Gana el bando con mayor `total`.
+- Si hay empate en el primer puesto, **queda empatado**: no hay desempate.
+- No hay victoria instantánea.
+
+## 8. Casos de prueba
+
+Casos para los tests del motor. "—" significa que la categoría no se cumple (solo se puede tachar).
+
+| Dados | 1 | 2 | 3 | 4 | 5 | 6 | Esc 1-5 | Esc 2-6 | Full | Póker | Suma (Menor/Mayor) | Generala |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 5-5-5-2-2 | 0 | 4 | 0 | 0 | 15 | 0 | — | — | 45 | — | 19 | — |
+| 2-2-2-2-6 | 0 | 8 | 0 | 0 | 0 | 6 | — | — | — | 48 | 14 | — |
+| 2-2-2-2-2 | 0 | 10 | 0 | 0 | 0 | 0 | — | — | — | — | 10 | 60 |
+| 3-1-4-5-2 | 1 | 2 | 3 | 4 | 5 | 0 | 20 | — | — | — | 15 | — |
+| 6-2-5-3-4 | 0 | 2 | 3 | 4 | 5 | 6 | — | 20 | — | — | 20 | — |
+| 1-2-3-4-6 | 1 | 2 | 3 | 4 | 0 | 6 | — | — | — | — | 16 | — |
+| 6-6-6-5-5 | 0 | 0 | 0 | 0 | 10 | 18 | — | — | 48 | — | 28 | — |
+
+## Preguntas abiertas
+
+- [ ] ❓ **Tachar en Servida:** ¿se puede tachar una casilla de la columna Servida en un turno cuyo último tiro **no** fue servido? (Es clave para la estrategia: define si la Servida se puede "descartar" en cualquier momento.)
+- [ ] ❓ **Tachar en Baja/Sube:** ¿tachar también tiene que respetar el orden? Es decir, ¿solo se puede tachar la próxima casilla libre?
+- [ ] ❓ **Empate al elegir quién empieza:** si dos bandos sacan el mismo número más alto, ¿vuelven a tirar solo ellos? ¿Y el orden de los demás turnos es en ronda (por ejemplo, en sentido horario) a partir del que empieza?
 
 ## Historial de cambios
 
 | Versión | Fecha | Cambio |
 | --- | --- | --- |
 | 0.0-borrador | 2026-10-10 | Plantilla inicial con hipótesis y preguntas abiertas. |
+| 1.0-rc | 2026-10-10 | Reglas confirmadas por Facu: 4 columnas, 13 categorías + Bonus, definición de servida, Menor/Mayor, tachado, puntaje y fin de partida. Quedan 3 preguntas abiertas. |
