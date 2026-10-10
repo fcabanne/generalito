@@ -1,17 +1,19 @@
 # Generala especial — Reglas
 
-> Borrador en construcción. Los puntos marcados con **(?)** están pendientes de confirmar.
-
 ## Jugadores
 
 - Se puede jugar de cualquier forma: solo, 1v1, 2v2, 1v1v1, 2v2v2, 1v1v1v1v1, etc.
-- Gana el jugador o equipo con mayor puntaje total.
+- En equipos, cada equipo comparte una planilla y sus integrantes se turnan para tirar.
+- Gana el jugador o equipo con mayor puntaje total. Si hay empate, queda empatado.
 
 ## Dados y turnos
 
 - Se juega con 5 dados.
 - Cada turno tiene hasta 3 tiros. Se pueden usar 1, 2 o 3; no hace falta usarlos todos.
+- Entre tiro y tiro se pueden guardar los dados que se quieran y volver a tirar el resto.
 - Al terminar el turno **siempre** se anota algo: un puntaje o una X (tachar).
+- Se puede anotar en cualquier columna en cualquier momento, respetando la regla de cada columna.
+- La partida termina cuando se completan las 52 casillas (13 categorías × 4 columnas).
 
 ## Columnas
 
@@ -19,10 +21,18 @@ La planilla tiene 4 columnas:
 
 | Columna | Regla |
 |---|---|
-| **Baja** | Se completa obligatoriamente de arriba hacia abajo (de 1 a Generala). |
-| **Sube** | Se completa obligatoriamente de abajo hacia arriba (de Generala a 1). |
+| **Baja** | Se completa en orden de arriba hacia abajo (de 1 a Generala): solo se puede anotar en la siguiente casilla libre. |
+| **Sube** | Se completa en orden de abajo hacia arriba (de Generala a 1): solo se puede anotar en la siguiente casilla libre. |
 | **Desordenada** | Se completa en cualquier orden. |
-| **Servida** | Solo se anota un resultado obtenido tirando los 5 dados juntos. Puede ser en cualquiera de los 3 tiros. |
+| **Servida** | Se completa en cualquier orden, pero solo con un tiro servido. |
+
+El Bonus no es una casilla para anotar, así que Baja y Sube lo saltean.
+
+### Tiro servido
+
+Un tiro es servido cuando se tiran los 5 dados juntos, en cualquiera de los 3 tiros del turno, sin importar lo que se haya guardado antes.
+
+Ejemplo: en el primer tiro guardás 2 dados y en el segundo no sale lo que buscabas. En el tercero podés volver a tirar los 5 y, si anotás ese resultado, cuenta como servido.
 
 ## Categorías (en orden de bajada)
 
@@ -39,12 +49,23 @@ La planilla tiene 4 columnas:
 | Escalera 2-6 | 20 |
 | Full | 30 + la suma de los 3 dados iguales (ej.: full de 2 = 30 + 6 = 36) |
 | Póker | 40 + la suma de los 4 dados iguales (ej.: póker de 2 = 40 + 8 = 48) |
-| Menor | Suma de los dados **(?)**. Tiene que ser menor que el Mayor de la misma columna. |
-| Mayor | Suma de los dados **(?)**. Tiene que ser mayor que el Menor de la misma columna. |
+| Menor | Suma de los 5 dados. Tiene que ser estrictamente menor que el Mayor de la misma columna. |
+| Mayor | Suma de los 5 dados. Tiene que ser estrictamente mayor que el Menor de la misma columna. |
 | Generala | 50 + la suma de los 5 dados iguales (ej.: generala de 2 = 50 + 10 = 60) |
 
-- Todos los casilleros se pueden tachar con una X, salvo el Bonus.
-- Sacar algo servido no da puntos extra.
+### Aclaraciones
+
+- **Escaleras:** la de 1-5 es exactamente 1-2-3-4-5 y la de 2-6 es exactamente 2-3-4-5-6.
+- **Full:** 3 dados iguales y otros 2 iguales entre sí, pero distintos de los 3.
+- **Póker:** exactamente 4 dados iguales y uno distinto. Cinco iguales no cuentan como póker ni como full.
+- **Menor y Mayor:**
+  - No pueden valer lo mismo.
+  - La restricción solo aplica si la otra casilla de la misma columna ya tiene un valor anotado.
+  - Si una de las dos está tachada, la otra puede valer cualquier cosa.
+- **Tachar:** todas las casillas se pueden tachar con una X, salvo el Bonus. Una X vale 0. Anotar 0 es lo mismo que tachar, pero se acostumbra poner la X.
+- **Servida:**
+  - No da puntos extra.
+  - La generala servida se anota como cualquier otra y no gana la partida directamente.
 
 ## Puntaje
 
