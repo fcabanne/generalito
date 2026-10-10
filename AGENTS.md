@@ -14,10 +14,10 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 
 > Actualizar esta sección al cerrar cada etapa.
 
-- **Etapa:** 0, definición de reglas.
+- **Etapa:** 0, definición de reglas (cerrada: reglas 1.0).
 - **Código:** todavía no hay. No hay entorno Python armado.
-- **Bloqueante:** las reglas están en `1.0-rc`; quedan 3 preguntas abiertas al final de `docs/REGLAS.md`.
-- **Próximo paso:** cerrar las reglas con Facu; después, el motor del juego con tests.
+- **Bloqueante:** ninguno. Lo único pendiente de las reglas (orden de turnos con varios bandos) es para la v2.
+- **Próximo paso:** el motor del juego con tests. Los casos de `docs/REGLAS.md` §8 y la partida de `docs/PARTIDA_EJEMPLO.md` sirven de base para los tests.
 
 ## Reglas de trabajo
 
@@ -49,6 +49,7 @@ CLAUDE.md          importa AGENTS.md (para Claude Code)
 docs/
   PRD.md           documento de producto
   REGLAS.md        reglas del juego (fuente de verdad)
+  PARTIDA_EJEMPLO.md  partida completa de ejemplo, turno por turno
   DECISIONES.md    registro de decisiones
 ```
 

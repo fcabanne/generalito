@@ -1,10 +1,10 @@
 # Reglas de la generala de 4 columnas
 
-> **Estado: confirmadas por Facu, salvo lo marcado con ❓ en [Preguntas abiertas](#preguntas-abiertas).** Este documento es la fuente de verdad del motor del juego.
+> **Estado: ✅ confirmadas por Facu.** Este documento es la fuente de verdad del motor del juego. Lo único pendiente es el orden de turnos con varios bandos, que no afecta a la v1 (ver [Pendiente para la v2](#pendiente-para-la-v2)).
 >
 > Está escrito para que el motor se pueda implementar sin interpretar nada. Si algo no está acá, no es regla: hay que preguntar.
 
-Versión de reglas: `1.0-rc` (pasa a `1.0` cuando se cierren las preguntas abiertas).
+Versión de reglas: `1.0`.
 
 ## 1. Jugadores
 
@@ -12,6 +12,7 @@ Versión de reglas: `1.0-rc` (pasa a `1.0` cuando se cierren las preguntas abier
 - Cada bando tiene **una sola planilla**. En un equipo, los integrantes comparten la planilla y se turnan para tirar. Quién decide la jugada dentro del equipo no importa para las reglas: para el motor, **un equipo es igual a un jugador**.
 - Para elegir quién empieza, cada bando tira 1 dado y empieza el más alto.
 - Los bandos juegan por turnos alternados, de a un turno completo por vez.
+- La v1 del modelo juega sola (1 bando), así que el orden de turnos no aplica todavía.
 
 ## 2. Dados y turno
 
@@ -62,7 +63,7 @@ Hay 13 categorías anotables más el Bonus, que es una fila calculada y no una c
 | **Baja** | Solo la próxima casilla libre en el orden de bajada: 1, 2, 3, 4, 5, 6, Escalera 1-5, Escalera 2-6, Full, Póker, Menor, Mayor, Generala. |
 | **Sube** | Solo la próxima casilla libre en el orden inverso: Generala, Mayor, Menor, Póker, Full, Escalera 2-6, Escalera 1-5, 6, 5, 4, 3, 2, 1. |
 | **Desordenada** | Cualquier casilla libre. |
-| **Servida** | Cualquier casilla libre, pero solo si el último tiro del turno fue servido (§2.1). |
+| **Servida** | Cualquier casilla libre. Para anotar un **puntaje**, el último tiro del turno tiene que haber sido servido (§2.1). Para **tachar** no hace falta. |
 
 - El Bonus no ocupa lugar en el orden de Baja ni de Sube: se saltea.
 - En cada turno se puede anotar en **cualquier columna**, siempre que se cumpla su restricción.
@@ -74,6 +75,12 @@ Al terminar el turno, el jugador elige una casilla libre que cumpla la restricci
 
 - **Un puntaje**, si los dados cumplen la condición de la categoría (§5). Ese puntaje es el que dice la tabla; no se elige el valor.
 - **Una X (tachar)**, en cualquier caso. Una X vale 0 a todos los efectos.
+
+Tachar también ocupa la casilla, así que respeta la restricción de cada columna:
+
+- En Baja y Sube solo se puede tachar la próxima casilla libre.
+- En Desordenada se puede tachar cualquier casilla libre.
+- En Servida se puede tachar cualquier casilla libre, **aunque el último tiro no haya sido servido**.
 
 Reglas:
 
@@ -148,6 +155,8 @@ Ejemplos de Bonus: si de 1 a 6 se suma 62, el Bonus vale 92. Si se suma 60, vale
 
 ## 8. Casos de prueba
 
+Hay una partida completa de ejemplo en [`PARTIDA_EJEMPLO.md`](PARTIDA_EJEMPLO.md).
+
 Casos para los tests del motor. "—" significa que la categoría no se cumple (solo se puede tachar).
 
 | Dados | 1 | 2 | 3 | 4 | 5 | 6 | Esc 1-5 | Esc 2-6 | Full | Póker | Suma (Menor/Mayor) | Generala |
@@ -160,11 +169,12 @@ Casos para los tests del motor. "—" significa que la categoría no se cumple (
 | 1-2-3-4-6 | 1 | 2 | 3 | 4 | 0 | 6 | — | — | — | — | 16 | — |
 | 6-6-6-5-5 | 0 | 0 | 0 | 0 | 10 | 18 | — | — | 48 | — | 28 | — |
 
-## Preguntas abiertas
+## Pendiente para la v2
 
-- [ ] ❓ **Tachar en Servida:** ¿se puede tachar una casilla de la columna Servida en un turno cuyo último tiro **no** fue servido? (Es clave para la estrategia: define si la Servida se puede "descartar" en cualquier momento.)
-- [ ] ❓ **Tachar en Baja/Sube:** ¿tachar también tiene que respetar el orden? Es decir, ¿solo se puede tachar la próxima casilla libre?
-- [ ] ❓ **Empate al elegir quién empieza:** si dos bandos sacan el mismo número más alto, ¿vuelven a tirar solo ellos? ¿Y el orden de los demás turnos es en ronda (por ejemplo, en sentido horario) a partir del que empieza?
+No afecta a la v1 (un solo bando). Hay que definirlo antes de la v2:
+
+- [ ] Si al tirar el dado para elegir quién empieza hay empate en el número más alto, ¿cómo se desempata?
+- [ ] Con más de 2 bandos, ¿cómo sigue el orden de turnos después del primero?
 
 ## Historial de cambios
 
@@ -172,3 +182,4 @@ Casos para los tests del motor. "—" significa que la categoría no se cumple (
 | --- | --- | --- |
 | 0.0-borrador | 2026-10-10 | Plantilla inicial con hipótesis y preguntas abiertas. |
 | 1.0-rc | 2026-10-10 | Reglas confirmadas por Facu: 4 columnas, 13 categorías + Bonus, definición de servida, Menor/Mayor, tachado, puntaje y fin de partida. Quedan 3 preguntas abiertas. |
+| 1.0 | 2026-10-10 | Se puede tachar en Servida sin tiro servido. Tachar en Baja y Sube respeta el orden. El orden de turnos con varios bandos queda pendiente para la v2. |

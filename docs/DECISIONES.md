@@ -14,6 +14,21 @@ Formato:
 
 ---
 
+## 2026-10-10 · Reglas 1.0 cerradas; el orden de turnos multijugador queda para la v2
+
+**Contexto:** las reglas bloqueaban el motor. Facu confirmó todas las que afectan a un jugador solo.
+
+**Decisión:** [`REGLAS.md`](REGLAS.md) pasa a la versión 1.0. El desempate para elegir quién empieza y el orden de turnos con más de 2 bandos se definen antes de la v2, porque la v1 juega sola.
+
+**Alternativas descartadas:** esperar a definir todo antes de empezar el motor. Se descartó porque esas reglas no cambian nada en la v1.
+
+**Consecuencias:**
+
+- El motor se puede empezar.
+- Cuando se definan esas reglas, la versión sube a 1.1. Como no cambian el juego de un bando solo, no deberían invalidar los snapshots de la v1.
+
+---
+
 ## 2026-10-10 · Decisiones de arranque (heredadas del PRD)
 
 **Contexto:** arranque del repo a partir de [`PRD.md`](PRD.md).

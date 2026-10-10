@@ -13,18 +13,19 @@ El objetivo es construir, en tu propia máquina y desde cero, una IA que aprenda
 
 ## El juego
 
-La generala de tu familia tiene 4 columnas (baja, sube, desordenada y servida) y todos los juegos se anotan en cada una. Se juega entre 2 jugadores con 5 dados y 3 tiros por turno.
+Las reglas completas están en [`REGLAS.md`](REGLAS.md) (versión 1.0), que es la fuente de verdad del motor. Resumen de lo que más pesa para el aprendizaje:
 
-Antes de escribir el motor hay que fijar las reglas por escrito, porque cambian la estrategia. Lo que falta definir:
+- **Planilla:** 4 columnas (baja, sube, desordenada y servida) × 13 categorías = 52 casillas, más una fila de Bonus calculada en cada columna. Una partida tiene 52 turnos por jugador.
+- **Turno:** 5 dados y hasta 3 tiros. Después de cada tiro se elige entre anotar o guardar dados y volver a tirar. En cada turno se anota exactamente una casilla, con un puntaje o con una X.
+- **Columnas:** baja y sube se llenan en un orden fijo (solo la próxima casilla libre). Desordenada se llena en cualquier orden. En servida solo se anota un puntaje si el último tiro fue de los 5 dados juntos, en cualquiera de los 3 tiros; tachar se puede siempre.
+- **Interacciones dentro de una columna:**
+  - El Bonus suma 30 si los números del 1 al 6 llegan a 60.
+  - El Menor tiene que ser estrictamente menor que el Mayor de la misma columna.
+- **Tachar** se puede siempre, aunque haya algo para anotar. Es una decisión estratégica, sobre todo para no trabar baja y sube.
+- **Fin:** gana el mayor puntaje total y los empates quedan así. No hay victoria instantánea ni premio por servida.
+- **Jugadores:** en la familia se juega de a cualquier cantidad de jugadores o equipos. Un equipo comparte planilla, así que para el motor equivale a un jugador. El modelo arranca jugando solo (v1).
 
-- Qué juegos hay en cada columna y cuánto vale cada uno.
-- Cómo funciona cada columna: si hay un orden obligatorio para llenarla o se anota libremente.
-- Qué significa exactamente anotar "servida" (se supone que en el primer tiro, a confirmar).
-- Si se puede tachar un casillero, y cuándo.
-- Si hay reglas especiales de victoria, como una generala servida.
-- Cómo se calcula el puntaje final y qué pasa con los empates.
-
-Supuesto de trabajo: la planilla tiene unos 44 casilleros (4 columnas × 11 juegos). Es una estimación mía, a corregir con las reglas reales.
+Puntaje máximo teórico: 426 por columna y 1704 por planilla.
 
 ## Alcance por versiones
 
@@ -42,7 +43,16 @@ Fuera de alcance por ahora: nube, APIs externas, modelos preentrenados y cualqui
 
 No se le enseña a jugar: se le dan las reglas y una recompensa, y descubre la estrategia por su cuenta. Es código escrito desde cero, no un modelo ya hecho.
 
-**El modelo.** Es una red neuronal chica, de unas pocas capas, que se arma con PyTorch. Recibe el estado del juego (los 5 dados, qué tiro es, qué casilleros están llenos y, en la v2, la planilla del rival) y devuelve una puntuación para cada acción posible: qué dados guardar o dónde anotar. Las acciones ilegales se descartan.
+**El modelo.** Es una red neuronal chica, de unas pocas capas, que se arma con PyTorch. Recibe el estado del juego y devuelve una puntuación para cada acción posible. Las acciones ilegales se descartan (se enmascaran).
+
+- **Estado:**
+  - Los 5 dados y qué tiro es (1, 2 o 3).
+  - Si el último tiro fue servido.
+  - La planilla con sus **valores**, no solo qué casillas están llenas: hacen falta para el Bonus (cuánto falta para 60 en cada columna) y para la restricción entre Menor y Mayor.
+  - En la v2, también la planilla del rival.
+- **Acciones:**
+  - Guardar: 32 subconjuntos de dados. Guardar ninguno es tirar los 5 juntos, o sea, un tiro servido.
+  - Anotar: hasta 52 casillas, cada una con su puntaje o con una X.
 
 **El ciclo.** Empieza con pesos al azar, así que juega mal. Termina una partida, ve cuánto sacó y ajusta sus pesos un poco: las decisiones de las partidas buenas se vuelven más probables y las de las malas, menos. Se repite millones de veces.
 
@@ -54,7 +64,7 @@ No se le enseña a jugar: se le dan las reglas y una recompensa, y descubre la e
 2. Mejora rápida: en las primeras miles de partidas aprende lo básico, como guardar pares y no tachar casilleros valiosos.
 3. Meseta lenta: mejora poco y de a poco; ahí aparecen las decisiones finas.
 
-**Dificultad central.** Una decisión del turno 3 puede definir el resultado 40 turnos después, y la red tiene que descubrir cuál decisión fue la buena. Por eso hacen falta tantas partidas.
+**Dificultad central.** Una decisión del turno 3 puede definir el resultado 50 turnos después, y la red tiene que descubrir cuál decisión fue la buena. Por eso hacen falta tantas partidas.
 
 ## La recompensa
 
@@ -64,7 +74,7 @@ En la v1 la recompensa es el puntaje final; en la v2 pasa a ser ganar o perder, 
 
 **Dos problemas que trae.**
 
-- La señal es escasa: recibe una sola respuesta al final de unas 40 decisiones, y aprende más lento.
+- La señal es escasa: recibe una sola respuesta al final de más de 100 decisiones (52 turnos), y aprende más lento.
 - El rival cambia: si juega contra una copia de sí mismo, ambos mejoran a la vez y el entrenamiento puede volverse inestable.
 
 **Cómo se manejan.**
@@ -108,7 +118,7 @@ La red solo produce números, no razones, pero registrando sus decisiones se pue
 - Situaciones de prueba: armar una mano, cambiar un solo detalle y ver cómo cambia la decisión.
 - Comparación con humanos: mirar solo los momentos donde difiere de lo que harían ustedes.
 
-**Cuánto pesa.** Cuenta aproximada, con el supuesto de 44 casilleros: unas 130 decisiones por partida y unos 400 bytes por decisión.
+**Cuánto pesa.** Cuenta aproximada: con 52 turnos y hasta 3 decisiones por turno (2 de guardar y 1 de anotar), una partida tiene entre 52 y 156 decisiones, unas 130 en la práctica. Cada decisión pesa unos 400 bytes.
 
 | Partidas guardadas | Peso aproximado |
 | --- | --- |
@@ -142,11 +152,11 @@ Cada cierto tiempo el entrenamiento guarda en un archivo los pesos de la red; es
 
 > **Pendiente:** en el documento original esta sección era un bloque embebido ("plan por etapas · 7 etapas, cada una con su condición de paso") que no se exportó. Hay que transcribir acá las 7 etapas y sus condiciones de paso.
 
-Las reglas son la única etapa que bloquea a las demás. No hay fechas: se ponen cuando decidas arrancar.
+Las reglas eran la única etapa que bloqueaba a las demás, y ya están cerradas. No hay fechas: se ponen cuando decidas arrancar.
 
 ## Riesgos y preguntas abiertas
 
-El riesgo que bloquea todo lo demás es que las reglas todavía no están escritas; sin ellas no se puede armar el motor.
+Las reglas ya están escritas y confirmadas ([`REGLAS.md`](REGLAS.md), versión 1.0), así que el motor se puede empezar.
 
 **Riesgos.**
 
@@ -156,7 +166,7 @@ El riesgo que bloquea todo lo demás es que las reglas todavía no están escrit
 
 **Preguntas abiertas.**
 
-- [ ] ¿Cuáles son las reglas exactas de cada columna, el puntaje de cada juego y el significado de servida?
-- [ ] ¿Hay reglas especiales, como victoria instantánea o tachado de casilleros?
+- [x] ¿Cuáles son las reglas exactas de cada columna, el puntaje de cada juego y el significado de servida? Ver [`REGLAS.md`](REGLAS.md).
+- [x] ¿Hay reglas especiales, como victoria instantánea o tachado de casilleros? No hay victoria instantánea. Se puede tachar cualquier casilla salvo el Bonus.
 - [ ] ¿La v1 maximiza el puntaje total de la planilla completa o hay otro criterio?
 - [ ] ¿Qué hardware hay disponible (procesador, memoria, si hay placa de video)?
