@@ -1,1 +1,28 @@
 # generalito
+
+Una IA que aprende sola a jugar a la **generala de 4 columnas** de la familia (baja, sube, desordenada y servida), entrenada desde cero con aprendizaje por refuerzo, 100% local.
+
+No se le enseñan estrategias: se le dan las reglas y una recompensa, simula miles de partidas y mejora. Lo que más interesa es **ver qué estrategias descubre**, incluso las que nadie de la familia conoce.
+
+## Estado
+
+🟡 **Etapa 0: definición de reglas.** Todavía no hay código. Las reglas exactas del juego son lo único que bloquea todo lo demás. Ver [`docs/REGLAS.md`](docs/REGLAS.md).
+
+## Hoja de ruta
+
+| Versión | Qué hace | Recompensa |
+| --- | --- | --- |
+| v1 | Juega sola (un jugador) | Puntaje final |
+| v2 | Juega contra un rival (self-play contra versiones viejas) | Ganar / perder |
+| v3 | Sugiere jugadas en una partida real (dados a mano, después cámara) | — usa el agente entrenado |
+
+## Documentación
+
+- [`docs/PRD.md`](docs/PRD.md): el documento de producto original (visión, alcance, aprendizaje, registro, snapshots, riesgos).
+- [`docs/REGLAS.md`](docs/REGLAS.md): las reglas del juego, a completar. Fuente de verdad del motor.
+- [`docs/DECISIONES.md`](docs/DECISIONES.md): registro de decisiones tomadas (y por qué).
+- [`AGENTS.md`](AGENTS.md): contexto y convenciones para sesiones de agentes de código (Claude Code y otros).
+
+## Stack previsto
+
+Python, NumPy y PyTorch. Corre en CPU de notebook; sin GPU, sin nube, sin APIs externas, sin modelos preentrenados.
