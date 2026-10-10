@@ -85,7 +85,7 @@ Tachar también ocupa la casilla, así que respeta la restricción de cada colum
 Reglas:
 
 - El jugador elige **libremente** dónde anotar entre todas las opciones legales. Por ejemplo, con 5-5-5-2-2 puede anotar Full (45), 5 (15), 2 (4), Menor o Mayor (19, si se cumple la restricción) o tachar cualquier casilla habilitada.
-- Se puede tachar **aunque haya algo para anotar**. Es parte de la estrategia (por ejemplo, para destrabar Baja o Sube).
+- Se puede tachar **aunque haya algo para anotar**.
 - Anotar 0 en una categoría de números (por ejemplo, en "1" sin ningún 1) es equivalente a tachar. Por costumbre se pone X.
 - Los dados no se pueden anotar en una categoría cuya condición no cumplen. En ese caso la única opción para esa casilla es tachar.
 
@@ -133,7 +133,7 @@ Las casillas 1 a 6 **no se suman aparte**: ya están dentro del Bonus.
 
 Ejemplos de Bonus: si de 1 a 6 se suma 62, el Bonus vale 92. Si se suma 60, vale 90. Si se suma 59, vale 59.
 
-### 6.1 Máximos teóricos (útiles para normalizar recompensas)
+### 6.1 Máximos teóricos
 
 | Concepto | Máximo |
 | --- | --- |

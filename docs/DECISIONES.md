@@ -14,6 +14,34 @@ Formato:
 
 ---
 
+## 2026-10-10 · El modelo aprende sin sesgo humano
+
+**Contexto:** el objetivo es ver qué estrategias descubre el modelo por su cuenta y compararlas con las de la familia. Facu no quiere sesgarlo de ninguna forma.
+
+**Decisión:**
+
+- La recompensa es solo el resultado final.
+- El estado es crudo.
+- No hay imitación ni heurísticas humanas en el entrenamiento.
+- Las reglas no llevan comentarios de estrategia.
+- La referencia de la familia (entre 950 y 1050 puntos por partida) es solo una meta de evaluación.
+
+**Alternativas descartadas:**
+
+- *Reward shaping* (por ejemplo, premiar acercarse al Bonus).
+- Un jugador "estilo familia" como rival o maestro.
+- Variables derivadas como "cuánto falta para 60".
+
+Todas aceleran el aprendizaje, pero le meten la estrategia humana al modelo.
+
+**Consecuencias:**
+
+- El aprendizaje puede ser más lento.
+- Las estrategias que aparezcan van a ser propias del modelo, que es lo que interesa.
+- Si el entrenamiento no avanza, cualquier ayuda que se agregue se registra acá como una excepción explícita.
+
+---
+
 ## 2026-10-10 · Reglas 1.0 cerradas; el orden de turnos multijugador queda para la v2
 
 **Contexto:** las reglas bloqueaban el motor. Facu confirmó todas las que afectan a un jugador solo.

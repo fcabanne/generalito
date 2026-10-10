@@ -2,7 +2,7 @@
 
 Partida completa de un jugador (v1), con dados al azar (semilla 2026). Sirve para revisar las reglas y, más adelante, como caso de prueba del motor.
 
-El jugador sigue una heurística simple, no una estrategia buena: el objetivo es mostrar jugadas legales, no jugadas óptimas.
+Las decisiones de esta partida son arbitrarias. Solo sirve para verificar que cada jugada sea legal y que el puntaje esté bien calculado. **No es una referencia de cómo jugar** y no se usa para entrenar ni para evaluar al modelo.
 
 **Cómo leer la tabla:**
 

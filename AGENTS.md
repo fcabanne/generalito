@@ -27,7 +27,14 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 4. **Avanzar por versiones y etapas.** v1 (un jugador) → v2 (self-play) → v3 (sugeridor). No adelantar trabajo de una versión que todavía no empezó, salvo que se pida.
 5. **Registrar decisiones.** Toda decisión de diseño no trivial (codificación del estado, algoritmo de RL, formato de snapshots, etc.) va a `docs/DECISIONES.md` con su porqué.
 6. **Mantener este archivo al día.** Si cambia el estado, la estructura o una convención, actualizar `AGENTS.md` en el mismo commit.
-7. **Idioma.** Documentación, commits y conversación en español. Identificadores en el código: a definir al arrancar el código (ver más abajo).
+7. **No sesgar al modelo.** No meter conocimiento humano de cómo jugar en nada que use el entrenamiento:
+   - sin *reward shaping*;
+   - sin variables de estado armadas a mano que sugieran estrategias;
+   - sin imitar partidas ni heurísticas humanas;
+   - sin comentarios de estrategia en `docs/REGLAS.md`.
+
+   Los baselines y las metas (por ejemplo, la familia suele hacer entre 950 y 1050 puntos) solo sirven para evaluar. Ver "Sin sesgo humano" en el PRD.
+8. **Idioma.** Documentación, commits y conversación en español. Identificadores en el código: a definir al arrancar el código (ver más abajo).
 
 ## Principios de diseño (del PRD, aplican cuando haya código)
 

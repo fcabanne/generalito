@@ -21,7 +21,7 @@ Las reglas completas están en [`REGLAS.md`](REGLAS.md) (versión 1.0), que es l
 - **Interacciones dentro de una columna:**
   - El Bonus suma 30 si los números del 1 al 6 llegan a 60.
   - El Menor tiene que ser estrictamente menor que el Mayor de la misma columna.
-- **Tachar** se puede siempre, aunque haya algo para anotar. Es una decisión estratégica, sobre todo para no trabar baja y sube.
+- **Tachar** se puede siempre, aunque haya algo para anotar.
 - **Fin:** gana el mayor puntaje total y los empates quedan así. No hay victoria instantánea ni premio por servida.
 - **Jugadores:** en la familia se juega de a cualquier cantidad de jugadores o equipos. Un equipo comparte planilla, así que para el motor equivale a un jugador. El modelo arranca jugando solo (v1).
 
@@ -48,7 +48,7 @@ No se le enseña a jugar: se le dan las reglas y una recompensa, y descubre la e
 - **Estado:**
   - Los 5 dados y qué tiro es (1, 2 o 3).
   - Si el último tiro fue servido.
-  - La planilla con sus **valores**, no solo qué casillas están llenas: hacen falta para el Bonus (cuánto falta para 60 en cada columna) y para la restricción entre Menor y Mayor.
+  - La planilla con sus **valores**, no solo qué casillas están llenas, porque las reglas del Bonus y de Menor/Mayor dependen de ellos. Se le pasa el estado crudo, sin variables derivadas que sugieran qué conviene.
   - En la v2, también la planilla del rival.
 - **Acciones:**
   - Guardar: 32 subconjuntos de dados. Guardar ninguno es tirar los 5 juntos, o sea, un tiro servido.
@@ -61,10 +61,31 @@ No se le enseña a jugar: se le dan las reglas y una recompensa, y descubre la e
 **La curva de aprendizaje.**
 
 1. Arranque: juega al azar.
-2. Mejora rápida: en las primeras miles de partidas aprende lo básico, como guardar pares y no tachar casilleros valiosos.
+2. Mejora rápida: en las primeras miles de partidas aprende lo básico.
 3. Meseta lenta: mejora poco y de a poco; ahí aparecen las decisiones finas.
 
 **Dificultad central.** Una decisión del turno 3 puede definir el resultado 50 turnos después, y la red tiene que descubrir cuál decisión fue la buena. Por eso hacen falta tantas partidas.
+
+## Sin sesgo humano
+
+La idea es que el modelo descubra sus propias estrategias, así que no se le transmite ningún conocimiento de cómo juega la familia:
+
+- **Recompensa:** solo el resultado (puntaje final en la v1, ganar o perder en la v2). No hay premios intermedios (*reward shaping*), como puntos por acercarse al Bonus o por no tachar ciertas casillas.
+- **Estado crudo:** dados, número de tiro, si el último tiro fue servido y la planilla. No hay variables armadas a mano que sugieran una estrategia.
+- **Sin imitación:** no aprende de partidas humanas ni de heurísticas escritas por personas.
+- **Baselines y metas:** sirven solo para medir. Nunca se usan para entrenar.
+
+## Metas de evaluación
+
+Son referencias para saber si el modelo empieza a ser bueno. No se usan en el entrenamiento.
+
+| Referencia | Puntaje total |
+| --- | --- |
+| Partida de ejemplo, jugadas arbitrarias ([`PARTIDA_EJEMPLO.md`](PARTIDA_EJEMPLO.md)) | 874 |
+| Familia, partida típica | 950 a 1050 |
+| Máximo teórico | 1704 |
+
+Las del jugador al azar y del codicioso se agregan cuando estén medidas.
 
 ## La recompensa
 
