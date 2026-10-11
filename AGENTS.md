@@ -14,8 +14,8 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 
 > Actualizar esta sección al cerrar cada etapa.
 
-- **Etapa:** 0, definición de reglas (cerrada: reglas 1.0).
-- **Código:** todavía no hay. No hay entorno Python armado.
+- **Etapa:** 1 (reglas) cumplida; sigue la 2, motor del juego y registro. Plan completo en `docs/PRD.md`, "Plan por etapas".
+- **Código:** todavía no hay. Las herramientas ya están elegidas (ver "Herramientas" más abajo), pero el entorno no está armado.
 - **Bloqueante:** ninguno. Lo único pendiente de las reglas (orden de turnos con varios bandos) es para la v2.
 - **Próximo paso:** el motor del juego con tests. Los casos de `docs/REGLAS.md` §8 y la partida de `docs/PARTIDA_EJEMPLO.md` sirven de base para los tests.
 
@@ -34,7 +34,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
    - sin comentarios de estrategia en `docs/REGLAS.md`.
 
    Los baselines y las metas (por ejemplo, la familia suele hacer entre 950 y 1050 puntos) solo sirven para evaluar. Ver "Sin sesgo humano" en el PRD.
-8. **Idioma.** Documentación, commits y conversación en español. Identificadores en el código: a definir al arrancar el código (ver más abajo).
+8. **Idioma.** Documentación, commits y conversación en español. En el código, los nombres del dominio van en español (`planilla`, `tirada`, `anotar`, `servida`). Los términos técnicos genéricos pueden ir en inglés.
 
 ## Principios de diseño (del PRD, aplican cuando haya código)
 
@@ -62,10 +62,12 @@ docs/
 
 Cuando arranque el código, documentar acá la estructura real, cómo instalar, cómo correr los tests y cómo entrenar.
 
-## Pendiente de definir al arrancar el código
+## Herramientas
 
-- Gestor de entorno/dependencias (por ejemplo `uv` o `venv` + `pip`).
-- Herramientas de test y lint (por ejemplo `pytest` + `ruff`).
-- Idioma de los identificadores (español o inglés).
-- Hardware real de Facu (CPU, RAM, GPU) para calibrar tiempos de entrenamiento.
-- Las 7 etapas del plan, que en el PRD original eran un bloque embebido que no se exportó.
+- **Entorno y dependencias:** `uv`.
+- **Tests:** `pytest`.
+- **Lint y formato:** `ruff`.
+
+## Pendiente de definir
+
+- Hardware de Facu. Ya se sabe que tiene GPU RTX 5080. Faltan el procesador, la RAM y el sistema operativo para calibrar tiempos y cómo instalar.
