@@ -171,9 +171,26 @@ Cada cierto tiempo el entrenamiento guarda en un archivo los pesos de la red; es
 
 ## Plan por etapas
 
-> **Pendiente:** en el documento original esta sección era un bloque embebido ("plan por etapas · 7 etapas, cada una con su condición de paso") que no se exportó. Hay que transcribir acá las 7 etapas y sus condiciones de paso.
+Cada etapa tiene una condición de paso medible. No se avanza a la siguiente hasta cumplirla. No hay fechas: se ponen cuando decidas arrancar.
 
-Las reglas eran la única etapa que bloqueaba a las demás, y ya están cerradas. No hay fechas: se ponen cuando decidas arrancar.
+Los números de las condiciones (margen de 100 puntos, 55%, 10.000 partidas) son una propuesta inicial y se pueden ajustar.
+
+| # | Etapa | Qué incluye | Condición de paso | Estado |
+| --- | --- | --- | --- | --- |
+| 1 | Reglas por escrito | Columnas, juegos, puntajes, servida | Reglas sin ambigüedades y con ejemplos de puntaje resueltos a mano | ✅ Cumplida ([`REGLAS.md`](REGLAS.md) 1.0) |
+| 2 | Motor del juego y registro | Reglas, dados al azar con semilla y registro de decisiones | Pasan los tests automáticos con los casos verificados a mano: REGLAS.md §8, la partida de ejemplo y partidas nuevas revisadas por Facu. Además: la misma semilla reproduce la misma partida, nunca se permite una jugada ilegal, ningún puntaje supera 1704 y el registro funciona. | |
+| 3 | Jugadores de referencia y motor rápido | Jugador al azar, jugador codicioso y motor que juega miles de partidas en paralelo | Promedio de cada jugador medido en 10.000 partidas de evaluación con semillas fijas | |
+| 4 | v1: agente solitario | Aprende maximizando el puntaje final | Supera al codicioso por al menos 100 puntos de promedio en las mismas 10.000 partidas de evaluación. Meta, sin bloquear: acercarse a 950-1050 (nivel familia). | |
+| 5 | Análisis de su lógica | Valores por opción y situaciones de prueba | Informe con unas 20 situaciones de prueba: qué decide en cada una, con qué valores y cómo se compara con la familia | |
+| 6 | v2: dos jugadores | Self-play, recompensa ganar o perder | Antes de empezar: definir quién empieza y el orden de turnos (pendiente en REGLAS.md). Para pasar: le gana al agente de la v1 en al menos el 55% de 10.000 partidas. | |
+| 7a | v3: sugeridor con dados a mano | Se ingresan los dados y sugiere qué guardar y dónde anotar | Sugiere jugadas en una partida real de la familia | |
+| 7b | v3: sugeridor con cámara | Lee los dados con la cámara | Lee bien los dados en la gran mayoría de las tiradas reales | |
+
+**Reglas transversales:**
+
+- **Evaluación justa (dados reservados).** En las evaluaciones, cada dado tiene un número reservado según la partida, el turno, el tiro y la posición del dado. Si dos modelos vuelven a tirar el mismo dado en el mismo momento, les sale el mismo valor. Así la suerte queda pareja al comparar.
+- **Regla de corte.** Si el entrenamiento deja de mejorar durante un tramo largo, se frena y se analiza antes de seguir gastando horas.
+- **Cambio de reglas.** Si cambian las reglas del juego, se vuelve a la etapa 2. Los modelos entrenados con las reglas viejas quedan solo como referencia histórica.
 
 ## Riesgos y preguntas abiertas
 

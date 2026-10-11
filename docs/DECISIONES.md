@@ -14,6 +14,47 @@ Formato:
 
 ---
 
+## 2026-10-11 · Plan por etapas con condiciones de paso medibles
+
+**Contexto:** el plan de 7 etapas del PRD original no se había exportado. Facu lo transcribió y se revisó.
+
+**Decisión:**
+
+- Las condiciones de paso pasan a ser medibles, sobre 10.000 partidas de evaluación con semillas fijas.
+- El motor rápido (partidas en paralelo) entra en la etapa 3.
+- La v2 se mide contra el agente de la v1, no contra el codicioso.
+- La v3 se divide en dados a mano (7a) y cámara (7b).
+- En las evaluaciones se usan dados reservados por partida, turno, tiro y posición del dado.
+
+**Alternativas descartadas:**
+
+- Condiciones subjetivas, como "supera claramente" o "se entiende", porque generan discusión sobre si se cumplieron.
+- Usar una sola secuencia de azar para comparar modelos: como cada modelo vuelve a tirar dados distintos, los dados se desfasan apenas sus decisiones difieren.
+
+**Consecuencias:** cada etapa tiene un criterio objetivo para avanzar. Los números concretos son una propuesta inicial ajustable.
+
+---
+
+## 2026-10-11 · Herramientas: uv, pytest, ruff; nombres del dominio en español
+
+**Contexto:** había que elegir herramientas antes de escribir código.
+
+**Decisión:**
+
+- `uv` para el entorno y las dependencias.
+- `pytest` para los tests.
+- `ruff` para lint y formato.
+- En el código, los nombres del dominio van en español.
+
+**Alternativas descartadas:**
+
+- `venv` + `pip`: anda, pero es más lento y requiere más pasos manuales.
+- Nombres en inglés: es lo habitual, pero términos como "servida", "generala" o "tachar" no tienen buena traducción y el código se alejaría de las reglas.
+
+**Consecuencias:** el código se lee con el mismo vocabulario que `REGLAS.md`.
+
+---
+
 ## 2026-10-10 · El modelo aprende sin sesgo humano
 
 **Contexto:** el objetivo es ver qué estrategias descubre el modelo por su cuenta y compararlas con las de la familia. Facu no quiere sesgarlo de ninguna forma.
