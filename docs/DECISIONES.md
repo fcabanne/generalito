@@ -14,6 +14,30 @@ Formato:
 
 ---
 
+## 2026-10-15 · Web de dados 3D como recurso visual para la presentación
+
+**Contexto:** para la presentación de resultados del experimento hacía falta material visual propio. Facu pidió una web para el celular con una grilla de dados 3D realistas pero estilizados, que giren con el dedo y se mezclen al sacudir el teléfono, inspirada en un estudio de material interactivo (una gelatina simulada con WebGPU).
+
+**Decisión:**
+
+- La web vive en `web/`, separada del motor y del entrenamiento: no comparte código con la IA.
+- three.js r186 incluido en `vendor/`, sin CDN ni paso de build. Así respeta el "todo local" y se puede servir tal cual.
+- Física propia con XPBD (la misma técnica de la referencia) en vez de una librería: hacía falta controlar la sensación (que el dado gire en su lugar, vuelva a su celda y se alinee) y es poco código.
+- Sacudida según la fuerza: suave re-tira los dados en su celda; fuerte los suelta y después vuelven a la grilla, mezclados.
+- Estilo: marfil clásico con puntos negros hundidos, estudio claro sobre papel `#E2DFDA` como la referencia.
+- Publicación en GitHub Pages desde la rama `gh-pages` (copia de `web/`). URL: https://fcabanne.github.io/generalito/
+
+**Alternativas descartadas:**
+
+- WebGPU como la referencia: todavía no anda en todos los celulares.
+- Motores de física hechos (cannon-es, Rapier): más peso y menos control sobre el comportamiento estilizado.
+- Cargar three.js desde una CDN: más simple, pero rompe el criterio de que todo funcione sin internet.
+- Repo aparte para la web: se prefirió tenerla junto al experimento que ilustra.
+
+**Consecuencias:** la rama `gh-pages` se actualiza a mano copiando `web/` (los pasos están en `web/README.md`). Si la presentación necesita más piezas, van en `web/` con el mismo criterio.
+
+---
+
 ## 2026-10-11 · Plan por etapas con condiciones de paso medibles
 
 **Contexto:** el plan de 7 etapas del PRD original no se había exportado. Facu lo transcribió y se revisó.

@@ -18,6 +18,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 - **Código:** todavía no hay. Las herramientas ya están elegidas (ver "Herramientas" más abajo), pero el entorno no está armado.
 - **Bloqueante:** ninguno. Lo único pendiente de las reglas (orden de turnos con varios bandos) es para la v2.
 - **Próximo paso:** el motor del juego con tests. Los casos de `docs/REGLAS.md` §8 y la partida de `docs/PARTIDA_EJEMPLO.md` sirven de base para los tests.
+- **Recursos visuales:** en `web/` hay una web de dados 3D (three.js) para la presentación, publicada en GitHub Pages desde la rama `gh-pages`. No forma parte del motor ni del entrenamiento. Ver `web/README.md`.
 
 ## Reglas de trabajo
 
@@ -58,6 +59,12 @@ docs/
   REGLAS.md        reglas del juego (fuente de verdad)
   PARTIDA_EJEMPLO.md  partida completa de ejemplo, turno por turno
   DECISIONES.md    registro de decisiones
+web/               recursos visuales para la presentación (no es parte del motor)
+  index.html       grilla de dados 3D interactiva
+  src/             física (XPBD, testeable en node), dado, escena, entrada, sonido
+  vendor/          three.js r186, incluido tal cual
+  test/            tests de la física (node --test web/test/*.test.mjs)
+  README.md        qué hace, cómo correrla y cómo publicarla
 ```
 
 Cuando arranque el código, documentar acá la estructura real, cómo instalar, cómo correr los tests y cómo entrenar.
@@ -67,6 +74,7 @@ Cuando arranque el código, documentar acá la estructura real, cómo instalar, 
 - **Entorno y dependencias:** `uv`.
 - **Tests:** `pytest`.
 - **Lint y formato:** `ruff`.
+- **Web de recursos visuales (`web/`):** JavaScript sin paso de build, three.js incluido en `vendor/`, tests con `node --test`.
 
 ## Pendiente de definir
 

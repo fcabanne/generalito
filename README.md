@@ -16,6 +16,10 @@ No se le enseñan estrategias: se le dan las reglas y una recompensa, simula mil
 | v2 | Juega contra un rival (self-play contra versiones viejas) | Ganar / perder |
 | v3 | Sugiere jugadas en una partida real (dados a mano, después cámara) | — usa el agente entrenado |
 
+## Recursos visuales
+
+[Dados 3D interactivos](https://fcabanne.github.io/generalito/) para la presentación: pasá el dedo, tocá o sacudí el celular. El código está en [`web/`](web/README.md).
+
 ## Documentación
 
 - [`docs/PRD.md`](docs/PRD.md): el documento de producto original (visión, alcance, aprendizaje, registro, snapshots, riesgos).
