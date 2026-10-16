@@ -38,9 +38,17 @@ En iOS la sacudida necesita permiso: el botón **Activar sacudida** lo pide. En 
 
 **Publicada en:** https://fcabanne.github.io/generalito/herramientas/
 
-Útiles de dibujo en 3D, con la paleta de la foto de referencia (papel salvia, rojo anaranjado, verde botella, petróleo, mostaza), dentro de una caja que es la pantalla. Al sacudir el celular se mueven como de verdad: saltan, giran, ruedan y se cruzan. Pasar el dedo los empuja, tocar uno lo hace saltar y **Ordenar** (o la tecla `O`) los devuelve volando a la composición prolija.
+Útiles de dibujo en 3D que imitan la foto de referencia: el mismo encuadre, la misma escala y la misma luz (de la izquierda, a unos 49° de altura, con sombras marrones duras). Sobre el fondo salvia hay una hoja crema (sólo color del piso, sin física), el lápiz rojo y el portaminas verticales, y abajo a la derecha una pila de lápices cortada por el borde. La composición está en `herramientas/src/composicion.js`, en cm, con el lápiz rojo (18,5 cm) como escala.
 
-- Hoy hay: lápiz de grafito (rojo y verde), cinco lápices de colores, portaminas, regla de madera de 30 cm y regla de acero de 20 cm.
+| Gesto | Qué pasa |
+| --- | --- |
+| Inclinar el celular a un lado | El lápiz rojo y el portaminas ruedan hacia el lado que baja (desde unos 2°; hasta 1,5° se ignora el pulso de la mano). |
+| Sacudir | Los mismos dos se mueven, saltan y giran. |
+| **Ordenar** o tecla `O` | Los devuelve a su lugar de la foto. |
+
+- Por ahora sólo se mueven esos dos: la pila es cinemática (fija, pero los lápices chocan contra ella). El dedo está apagado (`CON_DEDO` en `herramientas/src/entrada.js`).
+- En iOS el botón **Activar movimiento** pide permiso para el acelerómetro y la orientación. En la compu, las flechas ← → simulan la inclinación y la barra espaciadora (o **Sacudir**) una sacudida.
+- Hay modelados: lápiz de grafito (rojo y verde), cinco lápices de colores, portaminas, regla de madera de 30 cm y regla de acero de 20 cm. Las reglas no están en la composición.
 - Pendientes: gomas, sacapuntas y pinceles.
 - `herramientas/src/fisica.js`: la física de los dados generalizada a cuerpos largos (cajas redondeadas de cualquier proporción, inercia propia, materiales por par, rodadura, cinemáticos para Ordenar). Tests: `node --test web/herramientas/test/*.test.mjs`.
 - `herramientas/src/objetos/`: un módulo por objeto, con el contrato en `LEEME.md`. `herramientas/visor.html?objeto=lapiz&vista=cerca` muestra uno suelto (vistas `arriba`, `cerca`, `colision`, `todas`).

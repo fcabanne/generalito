@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 //  generalito · herramientas
-//  Útiles de dibujo en 3D dentro de una caja que es la pantalla:
-//  al sacudir el celular se mueven como de verdad. "Ordenar" los
-//  vuelve a la composición prolija.
+//  La foto de referencia en 3D: mismo encuadre, composición y luz.
+//  Sólo los dos lápices verticales se mueven: ruedan con la
+//  inclinación del celular y se sacuden; el resto está fijo.
+//  "Ordenar" los devuelve a su lugar.
 // ─────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { crearEscenario, TECHO } from './escenario.js';
@@ -10,36 +11,41 @@ import { Mundo } from './fisica.js';
 import { Entrada } from './entrada.js';
 import { Sonido } from './sonido.js';
 import { PALETA } from './paleta.js';
-import { COMPOSICION, ANCHO_CORTO } from './composicion.js';
+import { COMPOSICION, ALTO_VISIBLE, BORDE_DERECHO, LUZ, PAPEL, AMBIENTE } from './composicion.js';
 
 const qs = new URLSearchParams(location.search);
 const CON_UI = qs.get('ui') !== '0';
-const FONDO = qs.get('fondo') === 'crema' ? PALETA.crema : PALETA.salvia;
+const FONDO = qs.get('fondo') === 'crema' ? PALETA.crema : AMBIENTE.fondo;
 const movil = matchMedia('(pointer: coarse)').matches;
 const reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const canvas = document.getElementById('lienzo');
-const esc = crearEscenario(canvas, { fondo: FONDO, calidad: movil ? 1 : 2, captura: qs.has('captura') });
+const esc = crearEscenario(canvas, { ...AMBIENTE, fondo: FONDO, calidad: movil ? 1 : 2, captura: qs.has('captura'), luz: LUZ });
 const mundo = new Mundo();
 const sonido = new Sonido();
-const items = []; // { c: cuerpo de la física, malla, def, cuerpo }
+const items = []; // { c: cuerpo de la física, malla, def, cuerpo (el de la física) }
 
 // ── caja y composición ──
 let caja = null;
-let horizontal = false;
+let corto = ALTO_VISIBLE;
+let dx = 0; // corrimiento de la composición: alinea el borde derecho con el de la foto
 
 function armarCaja() {
   const W = window.innerWidth, H = window.innerHeight;
-  horizontal = W > H;
-  // en horizontal la composición va rotada: se agranda el encuadre para
-  // que entre a lo largo sin apretar los objetos
-  const corto = horizontal ? Math.max(ANCHO_CORTO, 54 / (W / H)) : ANCHO_CORTO;
+  const aspecto = W / H;
+  // el alto de la pantalla muestra lo mismo que el alto de la foto
+  corto = aspecto < 1 ? ALTO_VISIBLE * aspecto : ALTO_VISIBLE;
   caja = esc.encuadrar(corto, W, H);
+  dx = BORDE_DERECHO - caja.x1;
   mundo.planos = [
     { n: [0, 1, 0], d: 0, tipo: 'piso' },
     ...caja.paredes.map((p) => ({ ...p, tipo: 'pared' })),
     { n: [0, -1, 0], d: -TECHO, tipo: 'pared' },
   ];
+  esc.piso.ponerPapel({
+    x1: PAPEL.x1 - dx, z0: PAPEL.z0, r: PAPEL.r, color: PAPEL.color,
+    pliegue: [PAPEL.pliegue[0] - dx, PAPEL.pliegue[1], PAPEL.pliegue[2]],
+  });
 }
 
 const _q = new THREE.Quaternion();
@@ -48,10 +54,8 @@ const EJE_Y = new THREE.Vector3(0, 1, 0);
 // Pose de reposo de cada objeto en la composición, para el encuadre actual.
 function objetivos() {
   return items.map(({ def, cuerpo }) => {
-    let { x, z, giro } = def;
-    if (horizontal) { [x, z] = [z, -x]; giro -= 90; }
-    _q.setFromAxisAngle(EJE_Y, THREE.MathUtils.degToRad(giro));
-    return { x, y: cuerpo.medias[1] + cuerpo.radio, z, q: _q.clone() };
+    _q.setFromAxisAngle(EJE_Y, THREE.MathUtils.degToRad(def.giro));
+    return { x: def.x - dx, y: cuerpo.medias[1] + cuerpo.radio, z: def.z, q: _q.clone() };
   });
 }
 
@@ -65,24 +69,46 @@ async function cargar() {
     const mod = modulos[def.objeto];
     if (!mod) continue;
     const variante = mod.variantes.includes(def.variante) ? def.variante : mod.variantes[0];
-    const { malla, cuerpo } = mod.crear(variante);
+    const creado = mod.crear(variante);
+    const malla = creado.malla;
+    let cuerpo = creado.cuerpo;
+    // para que ruede parejo, el lápiz hexagonal choca como uno redondo
+    // (desde arriba la diferencia es de un par de décimas de milímetro)
+    if (def.rueda) {
+      const medio = cuerpo.medias[0] + cuerpo.radio;
+      cuerpo = { ...cuerpo, medias: [medio - def.rueda, 0, 0], radio: def.rueda };
+    }
     esc.escena.add(malla);
-    const c = mundo.agregar({ ...cuerpo, x: def.x, y: cuerpo.medias[1] + cuerpo.radio, z: def.z, qx: 0, qy: 0, qz: 0, qw: 1 });
+    const c = mundo.agregar({ ...cuerpo, x: def.x - dx, y: cuerpo.medias[1] + cuerpo.radio, z: def.z, qx: 0, qy: 0, qz: 0, qw: 1 });
+    // los que no se mueven quedan cinemáticos: sólo son obstáculos
+    c.cinematico = !def.movil;
     items.push({ c, malla, def: { ...def, variante }, cuerpo });
   }
 }
 
-// Al empezar: cada objeto cae desde un poquito arriba de su lugar.
+// Cada objeto en su lugar de la foto; los móviles apenas arriba, así se
+// asientan solos.
 function presentar() {
   const T = objetivos();
   items.forEach((it, i) => {
     const t = T[i], c = it.c;
     c.x = t.x; c.z = t.z;
-    c.y = t.y + (reducido ? 0 : 1.2 + i * 0.35);
+    c.y = t.y + (it.def.movil && !reducido ? 0.15 : 0);
     c.qx = t.q.x; c.qy = t.q.y; c.qz = t.q.z; c.qw = t.q.w;
     c.vx = c.vy = c.vz = 0; c.wx = c.wy = c.wz = 0;
   });
   mundo.despertarTodos();
+}
+
+// Los fijos siguen a la composición si cambia el encuadre.
+function reubicarFijos() {
+  const T = objetivos();
+  items.forEach((it, i) => {
+    if (it.def.movil) return;
+    const t = T[i], c = it.c;
+    c.x = t.x; c.y = t.y; c.z = t.z;
+    c.qx = t.q.x; c.qy = t.q.y; c.qz = t.q.z; c.qw = t.q.w;
+  });
 }
 
 // ── ordenar: cada objeto vuela a su lugar (cinemático) y se suelta ──
@@ -91,8 +117,8 @@ const suave = (k) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 
 function ordenar() {
   const T = objetivos();
-  // primero los que están más lejos de su lugar, así no se cruzan tanto
-  const orden = items.map((it, i) => i).sort((a, b) => {
+  // sólo los que se mueven; primero los que están más lejos de su lugar
+  const orden = items.map((it, i) => i).filter((i) => items[i].def.movil).sort((a, b) => {
     const da = Math.hypot(items[a].c.x - T[a].x, items[a].c.z - T[a].z);
     const db = Math.hypot(items[b].c.x - T[b].x, items[b].c.z - T[b].z);
     return db - da;
@@ -189,7 +215,7 @@ function medir() {
   if (prom > 1 / 45 && pixelRatio > 1.01) {
     pixelRatio = Math.max(1, pixelRatio - 0.25);
     esc.renderer.setPixelRatio(pixelRatio);
-    esc.encuadrar(caja ? (horizontal ? Math.max(ANCHO_CORTO, 54 / (window.innerWidth / window.innerHeight)) : ANCHO_CORTO) : ANCHO_CORTO);
+    esc.encuadrar(corto);
   }
 }
 
@@ -229,7 +255,7 @@ else {
       bSacudir.dataset.pedido = '1';
       const ok = await entrada.pedirPermiso();
       if (ok) {
-        bSacudir.querySelector('span').textContent = 'Sacudí el celular';
+        bSacudir.querySelector('span').textContent = 'Inclinalo o sacudilo';
         setTimeout(() => bSacudir.classList.add('oculta'), 2200);
         return;
       }
@@ -240,22 +266,30 @@ else {
 
 if (entrada.necesitaPermiso()) {
   const s = bSacudir?.querySelector('span');
-  if (s) s.textContent = 'Activar sacudida';
+  if (s) s.textContent = 'Activar movimiento';
 } else {
   entrada.escucharSensor();
   entrada.onSensor = () => bSacudir?.classList.add('oculta');
 }
 
+// teclado (escritorio): flechas inclinan, espacio sacude, O ordena, S sonido
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') entrada.simularInclinacion(null);
+});
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') { e.preventDefault(); sonido.desbloquear(); entrada.simularSacudida(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    entrada.simularInclinacion(e.key === 'ArrowRight' ? 12 : -12);
+  } else if (e.code === 'Space') { e.preventDefault(); sonido.desbloquear(); entrada.simularSacudida(); }
   else if (e.key === 'o' || e.key === 'O') ordenar();
   else if (e.key === 's' || e.key === 'S') { sonido.desbloquear(); bSonido?.setAttribute('aria-pressed', String(sonido.alternar())); }
 });
 
 window.addEventListener('resize', () => {
-  const antes = horizontal;
+  const antes = dx;
   armarCaja();
-  if (antes !== horizontal) ordenar();
+  reubicarFijos();
+  if (Math.abs(antes - dx) > 0.01) ordenar();
   sucio = 3;
 });
 document.addEventListener('visibilitychange', () => { ultimo = performance.now(); });

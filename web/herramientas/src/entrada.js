@@ -1,17 +1,22 @@
 // ─────────────────────────────────────────────────────────────
-//  Entrada de la caja de herramientas: el acelerómetro (lo principal),
-//  el dedo que empuja y el toque que hace saltar.
+//  Entrada de la caja de herramientas: los sensores del celular.
 //
+//  · Inclinar (izquierda/derecha): la gravedad tira hacia el lado que
+//    baja y los lápices ruedan.
 //  · Sacudir: los objetos sienten la aceleración de la caja al revés,
 //    con su valor físico real (m/s² → cm/s²): la pantalla es la caja.
-//  · Pasar el dedo: empuja y hace rodar lo que toca.
-//  · Tocar un objeto: le da un golpecito desde abajo en ese punto.
+//  · El dedo (empujar y tocar para hacer saltar) está apagado por ahora:
+//    CON_DEDO = true lo vuelve a prender.
 // ─────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 
 const ESCALA = 120;      // m/s² → cm/s² (×100) y un poco más de vida
 const UMBRAL = 1.1;      // m/s²: por debajo es ruido del sensor o la mano quieta
 const LIMITE = 45;       // m/s²: tope de la aceleración que se aplica
+const CON_DEDO = false;  // arrastre y toque con el dedo, apagados por ahora
+const G = 981;           // cm/s²
+const ZONA_MUERTA = 1.5; // grados de inclinación que se ignoran (pulso de la mano)
+const INCLINACION_MAX = 40; // grados
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
@@ -31,6 +36,9 @@ export class Entrada {
     this.sensor = false;
     this.simulada = null;
     this.intensidad = 0;   // envolvente de la sacudida, para el sonido y la vibración
+    this.lateral = 0;      // inclinación izquierda/derecha filtrada (grados, + baja la derecha)
+    this.lateralCrudo = null;
+    this.inclinacionSimulada = null; // grados (teclado y pruebas); null = la del sensor
 
     const o = { passive: false };
     canvas.addEventListener('pointerdown', (e) => this._down(e), o);
@@ -45,9 +53,10 @@ export class Entrada {
   _down(e) {
     e.preventDefault();
     this.sonido?.desbloquear();
+    this.onPrimera?.();
+    if (!CON_DEDO) return;
     try { this.canvas.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
     this.punteros.set(e.pointerId, { x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, t0: performance.now(), recorrido: 0 });
-    this.onPrimera?.();
   }
 
   _move(e) {
@@ -91,10 +100,15 @@ export class Entrada {
     return typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
   }
 
+  // Los dos pedidos salen juntos, dentro del mismo toque (iOS lo exige).
   async pedirPermiso() {
     try {
-      const r = await DeviceMotionEvent.requestPermission();
-      if (r === 'granted') { this.escucharSensor(); return true; }
+      const pedidos = [DeviceMotionEvent.requestPermission()];
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        pedidos.push(DeviceOrientationEvent.requestPermission());
+      }
+      const r = await Promise.all(pedidos);
+      if (r.every((x) => x === 'granted')) { this.escucharSensor(); return true; }
     } catch { /* rechazado */ }
     return false;
   }
@@ -103,6 +117,21 @@ export class Entrada {
     if (this._escuchando) return;
     this._escuchando = true;
     window.addEventListener('devicemotion', (e) => this._movimiento(e));
+    window.addEventListener('deviceorientation', (e) => this._orientacion(e));
+  }
+
+  // Inclinación izquierda/derecha de la pantalla, en grados (+ cuando
+  // baja el borde derecho), según cómo esté girada la pantalla.
+  _orientacion(e) {
+    if (e.gamma == null || e.beta == null) return;
+    const ang = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
+    let lat;
+    if (ang === 90) lat = -e.beta;
+    else if (ang === -90 || ang === 270) lat = e.beta;
+    else if (ang === 180) lat = -e.gamma;
+    else lat = e.gamma;
+    this.lateralCrudo = lat;
+    if (!this.sensor) { this.sensor = true; this.onSensor?.(); }
   }
 
   _movimiento(e) {
@@ -129,6 +158,9 @@ export class Entrada {
       this.onSensor?.();
     }
   }
+
+  // Inclinación de mentira (teclado, pruebas): grados, o null para volver al sensor.
+  simularInclinacion(grados) { this.inclinacionSimulada = grados; }
 
   simularSacudida(intensidad = 22, duracion = 1.1) {
     this.simulada = { t: 0, intensidad, duracion, fase: Math.random() * 6.28, dir: Math.random() * 6.28 };
@@ -172,6 +204,19 @@ export class Entrada {
       this._traqueteo(Math.min(mag, LIMITE), dt);
     } else {
       m.aExt[0] = m.aExt[1] = m.aExt[2] = 0;
+    }
+
+    // inclinación: la gravedad tira hacia el lado que baja. Para la caja es
+    // como si acelerara hacia el otro lado (los cuerpos sienten −aExt).
+    const objetivo = this.inclinacionSimulada ?? this.lateralCrudo ?? 0;
+    this.lateral += (objetivo - this.lateral) * (1 - Math.exp(-dt / 0.08));
+    const signo = Math.sign(this.lateral);
+    const grados = Math.min(INCLINACION_MAX, Math.max(0, Math.abs(this.lateral) - ZONA_MUERTA));
+    if (grados > 0) {
+      m.aExt[0] -= signo * G * Math.sin(grados * Math.PI / 180);
+      // despertar a los que se mueven (los quietos no se despiertan solos con
+      // una inclinación chica)
+      for (const c of m.cuerpos) if (!c.cinematico && c.dormido) m.despertar(c);
     }
   }
 

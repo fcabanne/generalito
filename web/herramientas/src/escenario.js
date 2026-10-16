@@ -12,7 +12,14 @@ import { PALETA } from './paleta.js';
 export const TAN_H = 0.14;  // tan(½ campo horizontal): lente larga, como en los dados
 export const TECHO = 9;     // profundidad de la caja (cm): vidrio invisible arriba
 
-export function crearEscenario(canvas, { fondo = PALETA.salvia, calidad = 1, captura = false } = {}) {
+// luz: dirección hacia la luz principal (THREE.Vector3); por defecto la de los dados
+// sombra: color de la sombra plena como factor del piso; oclusion: cuánto
+// oscurece el contacto; tamLuz: tamaño de la luz (penumbra); intensidad: la
+// luz principal
+export function crearEscenario(canvas, {
+  fondo = PALETA.salvia, calidad = 1, captura = false, luz = LUZ,
+  sombra = [0.6, 0.62, 0.57], oclusion = 0.55, tamLuz = 0.16, intensidad = 2.4,
+} = {}) {
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
@@ -28,12 +35,12 @@ export function crearEscenario(canvas, { fondo = PALETA.salvia, calidad = 1, cap
   const escena = new THREE.Scene();
   // el cartón de relleno, más fuerte que en los dados: las herramientas se
   // ven más de costado y sus caras de adelante no pueden quedar negras
-  escena.environment = crearEstudio(renderer, { fondo, relleno: 2.2 });
+  escena.environment = crearEstudio(renderer, { fondo, relleno: 2.2, luz });
   escena.environmentIntensity = 1;
 
-  const luz = new THREE.DirectionalLight(0xfff8f0, 2.4);
-  luz.position.copy(LUZ).multiplyScalar(100);
-  escena.add(luz);
+  const luzPpal = new THREE.DirectionalLight(0xfff8f0, intensidad);
+  luzPpal.position.copy(luz).normalize().multiplyScalar(100);
+  escena.add(luzPpal);
   // relleno: cielo tenue arriba, rebote del papel salvia abajo
   const relleno = new THREE.HemisphereLight(0xf2f2ee, 0xc9cbb8, 0.65);
   escena.add(relleno);
@@ -41,10 +48,12 @@ export function crearEscenario(canvas, { fondo = PALETA.salvia, calidad = 1, cap
   const piso = new Piso(renderer, {
     calidad,
     fondo,
-    tinte: [0.6, 0.62, 0.57],
+    tinte: sombra,
     escala: 0.9,
-    oclusion: 0.55,
+    oclusion,
+    luz,
   });
+  piso.uniforms.uTamLuz.value = tamLuz;
   escena.add(piso.mesh);
   SOMBRA.uSombra.value = piso.rtSombra.depthTexture;
   SOMBRA.uLuzVP.value = piso.uniforms.uLuzVP.value; // misma matriz, se actualiza sola
@@ -93,5 +102,5 @@ export function crearEscenario(canvas, { fondo = PALETA.salvia, calidad = 1, cap
     renderer.render(escena, camara);
   }
 
-  return { renderer, escena, camara, luz, relleno, piso, encuadrar, dibujar };
+  return { renderer, escena, camara, luz: luzPpal, relleno, piso, encuadrar, dibujar };
 }
