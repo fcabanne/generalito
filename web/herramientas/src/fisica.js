@@ -54,8 +54,8 @@ export const MATERIALES = ['madera', 'metal', 'goma', 'plastico', 'papel', 'vidr
 // La goma frena y casi no rebota; el metal desliza y rebota algo; la
 // madera y el plástico quedan en el medio.
 export const PARES = {
-  'madera|papel': [0.5, 0.4, 0.3, 0.015],
-  'metal|papel': [0.36, 0.28, 0.4, 0.008],
+  'madera|papel': [0.5, 0.4, 0.55, 0.015],
+  'metal|papel': [0.36, 0.28, 0.6, 0.008],
   'goma|papel': [0.95, 0.85, 0.1, 0.04],
   'plastico|papel': [0.42, 0.33, 0.32, 0.012],
   'madera|vidrio': [0.3, 0.24, 0.35, 0.006],

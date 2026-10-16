@@ -265,7 +265,7 @@ test('un lápiz redondo rueda y la resistencia a la rodadura lo frena', () => {
 // Deja `arriba` caer sobre `abajo` (apoyado) y controla en cada substep que
 // no se atraviesen: mientras sus proyecciones se cruzan, el de arriba
 // sigue arriba.
-function caerSobre(abajo, arriba, { giro = 90, y = 3, vy = 0, x = 0, z = 0, seg = 3 } = {}) {
+function caerSobre(abajo, arriba, { giro = 90, y = 3, vy = 0, x = 0, z = 0, seg = 5 } = {}) {
   const m = mundoAbierto();
   const A = m.agregar({ ...abajo });
   const B = m.agregar({ ...arriba, x, y, z, ...pose(qEje(0, 1, 0, giro * RAD)) });
