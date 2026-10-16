@@ -34,6 +34,18 @@ En iOS la sacudida necesita permiso: el botón **Activar sacudida** lo pide. En 
 - **Sonido** (`src/sonido.js`): golpes sintetizados con WebAudio, sin archivos.
 - Sólo se dibuja cuando algo se mueve, y si el teléfono no llega a ~45 fps baja la resolución de a poco.
 
+## Herramientas (en construcción)
+
+**Publicada en:** https://fcabanne.github.io/generalito/herramientas/
+
+Útiles de dibujo en 3D, con la paleta de la foto de referencia (papel salvia, rojo anaranjado, verde botella, petróleo, mostaza), dentro de una caja que es la pantalla. Al sacudir el celular se mueven como de verdad: saltan, giran, ruedan y se cruzan. Pasar el dedo los empuja, tocar uno lo hace saltar y **Ordenar** (o la tecla `O`) los devuelve volando a la composición prolija.
+
+- Hoy hay: lápiz de grafito (rojo y verde), cinco lápices de colores, portaminas, regla de madera de 30 cm y regla de acero de 20 cm.
+- Pendientes: gomas, sacapuntas y pinceles.
+- `herramientas/src/fisica.js`: la física de los dados generalizada a cuerpos largos (cajas redondeadas de cualquier proporción, inercia propia, materiales por par, rodadura, cinemáticos para Ordenar). Tests: `node --test web/herramientas/test/*.test.mjs`.
+- `herramientas/src/objetos/`: un módulo por objeto, con el contrato en `LEEME.md`. `herramientas/visor.html?objeto=lapiz&vista=cerca` muestra uno suelto (vistas `arriba`, `cerca`, `colision`, `todas`).
+- Mismos parámetros que los dados: `?ui=0` para el lienzo limpio, `?captura`; además `?fondo=crema`.
+
 ## Correrlo local
 
 ```bash

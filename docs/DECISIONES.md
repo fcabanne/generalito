@@ -14,6 +14,25 @@ Formato:
 
 ---
 
+## 2026-10-16 · Herramientas de dibujo: física propia generalizada en vez de Rapier
+
+**Contexto:** Facu pidió una segunda pieza visual, útiles de dibujo 3D realistas que se sacuden dentro de una caja, con la estética de una foto de referencia (flat-lay sobre papel salvia).
+
+**Decisión:**
+
+- Página aparte en `web/herramientas/`, que reusa la escena de los dados (estudio, luz, piso con sombra suave) con la paleta de la foto.
+- Física propia: la XPBD de los dados generalizada a cajas redondeadas de cualquier proporción, en `web/herramientas/src/fisica.js` (la de los dados no se tocó).
+- Un módulo por objeto con un contrato común (`src/objetos/LEEME.md`), geometría y texturas generadas por código. Se construyeron en paralelo con agentes y un visor para revisarlos sueltos.
+
+**Alternativas descartadas:**
+
+- Rapier (motor de física en WebAssembly): robusto, pero suma 1,6 MB comprimidos para algo que tenía que ser sencillo, y daba menos control sobre la sensación.
+- Modelos 3D hechos o descargados: rompe el "todo local" y la coherencia de estilo con los dados.
+
+**Consecuencias:** hay dos motores de física parecidos; si se usan más, conviene unificarlos.
+
+---
+
 ## 2026-10-15 · Web de dados 3D como recurso visual para la presentación
 
 **Contexto:** para la presentación de resultados del experimento hacía falta material visual propio. Facu pidió una web para el celular con una grilla de dados 3D realistas pero estilizados, que giren con el dedo y se mezclen al sacudir el teléfono, inspirada en un estudio de material interactivo (una gelatina simulada con WebGPU).

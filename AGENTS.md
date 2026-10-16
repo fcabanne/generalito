@@ -18,7 +18,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 - **Código:** todavía no hay. Las herramientas ya están elegidas (ver "Herramientas" más abajo), pero el entorno no está armado.
 - **Bloqueante:** ninguno. Lo único pendiente de las reglas (orden de turnos con varios bandos) es para la v2.
 - **Próximo paso:** el motor del juego con tests. Los casos de `docs/REGLAS.md` §8 y la partida de `docs/PARTIDA_EJEMPLO.md` sirven de base para los tests.
-- **Recursos visuales:** en `web/` hay una web de dados 3D (three.js) para la presentación, publicada en GitHub Pages desde la rama `gh-pages`. No forma parte del motor ni del entrenamiento. Ver `web/README.md`.
+- **Recursos visuales:** en `web/` hay una web de dados 3D (three.js) para la presentación, publicada en GitHub Pages desde la rama `gh-pages`, y en `web/herramientas/` una segunda página, en construcción, con útiles de dibujo que se sacuden dentro de una caja. No forman parte del motor ni del entrenamiento. Ver `web/README.md`.
 
 ## Reglas de trabajo
 
@@ -64,6 +64,8 @@ web/               recursos visuales para la presentación (no es parte del moto
   src/             física (XPBD, testeable en node), dado, escena, entrada, sonido
   vendor/          three.js r186, incluido tal cual
   test/            tests de la física (node --test web/test/*.test.mjs)
+  herramientas/    útiles de dibujo 3D en una caja (física XPBD para cuerpos largos,
+                   un módulo por objeto en src/objetos/, visor.html para verlos sueltos)
   README.md        qué hace, cómo correrla y cómo publicarla
 ```
 
