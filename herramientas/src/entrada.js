@@ -15,8 +15,9 @@ const UMBRAL = 1.1;      // m/s²: por debajo es ruido del sensor o la mano quie
 const LIMITE = 45;       // m/s²: tope de la aceleración que se aplica
 const CON_DEDO = false;  // arrastre y toque con el dedo, apagados por ahora
 const G = 981;           // cm/s²
-const ZONA_MUERTA = 1.5; // grados de inclinación que se ignoran (pulso de la mano)
-const INCLINACION_MAX = 40; // grados
+const ZONA_MUERTA = 7;   // grados de inclinación que se ignoran: hace falta inclinar bastante
+const GRAVEDAD_TILT = 0.45; // fracción de la gravedad que siente al inclinar (rueda más lento)
+const INCLINACION_MAX = 45; // grados
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
@@ -213,7 +214,7 @@ export class Entrada {
     const signo = Math.sign(this.lateral);
     const grados = Math.min(INCLINACION_MAX, Math.max(0, Math.abs(this.lateral) - ZONA_MUERTA));
     if (grados > 0) {
-      m.aExt[0] -= signo * G * Math.sin(grados * Math.PI / 180);
+      m.aExt[0] -= signo * G * GRAVEDAD_TILT * Math.sin(grados * Math.PI / 180);
       // despertar a los que se mueven (los quietos no se despiertan solos con
       // una inclinación chica)
       for (const c of m.cuerpos) if (!c.cinematico && c.dormido) m.despertar(c);

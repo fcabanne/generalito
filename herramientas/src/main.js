@@ -11,7 +11,7 @@ import { Mundo } from './fisica.js';
 import { Entrada } from './entrada.js';
 import { Sonido } from './sonido.js';
 import { PALETA } from './paleta.js';
-import { COMPOSICION, ALTO_VISIBLE, BORDE_DERECHO, LUZ, PAPEL, AMBIENTE } from './composicion.js';
+import { COMPOSICION, ALTO_VISIBLE, BORDE_DERECHO, BORDE_ABAJO, LUZ, PAPEL, AMBIENTE } from './composicion.js';
 
 const qs = new URLSearchParams(location.search);
 const CON_UI = qs.get('ui') !== '0';
@@ -28,6 +28,7 @@ const items = []; // { c: cuerpo de la física, malla, def, cuerpo (el de la fí
 // ── caja y composición ──
 let caja = null;
 let corto = ALTO_VISIBLE;
+let dz = 0; // lo mismo con el borde de abajo, donde está la pila
 let dx = 0; // corrimiento de la composición: alinea el borde derecho con el de la foto
 
 function armarCaja() {
@@ -37,14 +38,15 @@ function armarCaja() {
   corto = aspecto < 1 ? ALTO_VISIBLE * aspecto : ALTO_VISIBLE;
   caja = esc.encuadrar(corto, W, H);
   dx = BORDE_DERECHO - caja.x1;
+  dz = BORDE_ABAJO - caja.z1;
   mundo.planos = [
     { n: [0, 1, 0], d: 0, tipo: 'piso' },
     ...caja.paredes.map((p) => ({ ...p, tipo: 'pared' })),
     { n: [0, -1, 0], d: -TECHO, tipo: 'pared' },
   ];
   esc.piso.ponerPapel({
-    x1: PAPEL.x1 - dx, z0: PAPEL.z0, r: PAPEL.r, color: PAPEL.color,
-    pliegue: [PAPEL.pliegue[0] - dx, PAPEL.pliegue[1], PAPEL.pliegue[2]],
+    x1: PAPEL.x1 - dx, z0: PAPEL.z0 - dz, r: PAPEL.r, color: PAPEL.color,
+    pliegue: [PAPEL.pliegue[0] - dx, PAPEL.pliegue[1] - dz, PAPEL.pliegue[2]],
   });
 }
 
@@ -55,7 +57,7 @@ const EJE_Y = new THREE.Vector3(0, 1, 0);
 function objetivos() {
   return items.map(({ def, cuerpo }) => {
     _q.setFromAxisAngle(EJE_Y, THREE.MathUtils.degToRad(def.giro));
-    return { x: def.x - dx, y: cuerpo.medias[1] + cuerpo.radio, z: def.z, q: _q.clone() };
+    return { x: def.x - dx, y: cuerpo.medias[1] + cuerpo.radio, z: def.z - dz, q: _q.clone() };
   });
 }
 
@@ -79,7 +81,7 @@ async function cargar() {
       cuerpo = { ...cuerpo, medias: [medio - def.rueda, 0, 0], radio: def.rueda };
     }
     esc.escena.add(malla);
-    const c = mundo.agregar({ ...cuerpo, x: def.x - dx, y: cuerpo.medias[1] + cuerpo.radio, z: def.z, qx: 0, qy: 0, qz: 0, qw: 1 });
+    const c = mundo.agregar({ ...cuerpo, x: def.x - dx, y: cuerpo.medias[1] + cuerpo.radio, z: def.z - dz, qx: 0, qy: 0, qz: 0, qw: 1 });
     // los que no se mueven quedan cinemáticos: sólo son obstáculos
     c.cinematico = !def.movil;
     items.push({ c, malla, def: { ...def, variante }, cuerpo });
@@ -286,10 +288,10 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('resize', () => {
-  const antes = dx;
+  const antes = dx, antesZ = dz;
   armarCaja();
   reubicarFijos();
-  if (Math.abs(antes - dx) > 0.01) ordenar();
+  if (Math.abs(antes - dx) > 0.01 || Math.abs(antesZ - dz) > 0.01) ordenar();
   sucio = 3;
 });
 document.addEventListener('visibilitychange', () => { ultimo = performance.now(); });

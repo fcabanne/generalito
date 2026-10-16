@@ -15,7 +15,8 @@
 // ─────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 
-export const ALTO_VISIBLE = 45.2;   // cm que entran en el alto de la pantalla
+export const ALTO_VISIBLE = 34;     // cm que entran en el alto de la pantalla
+export const BORDE_ABAJO = 22.6;    // cm del centro de la foto a su borde de abajo
 export const BORDE_DERECHO = 12.65; // cm del centro de la foto a su borde derecho
 
 // Luz de la foto: de la izquierda y un poco de arriba, a unos 49° de altura.
