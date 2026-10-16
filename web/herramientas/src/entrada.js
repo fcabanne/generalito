@@ -12,6 +12,8 @@ import * as THREE from 'three';
 const ESCALA = 120;      // m/s² → cm/s² (×100) y un poco más de vida
 const UMBRAL = 1.1;      // m/s²: por debajo es ruido del sensor o la mano quieta
 const LIMITE = 45;       // m/s²: tope de la aceleración que se aplica
+const _p = new THREE.Vector3();
+const _q = new THREE.Quaternion();
 
 export class Entrada {
   constructor({ canvas, camara, mundo, sonido, onPrimera }) {
@@ -167,8 +169,28 @@ export class Entrada {
       const k = (Math.min(mag, LIMITE) / mag) * ESCALA * Math.min(1, (mag - UMBRAL) / 2);
       m.aExt[0] = -a.x * k; m.aExt[1] = -a.y * k; m.aExt[2] = -a.z * k;
       m.despertarTodos();
+      this._traqueteo(Math.min(mag, LIMITE), dt);
     } else {
       m.aExt[0] = m.aExt[1] = m.aExt[2] = 0;
+    }
+  }
+
+  // Con la misma aceleración para todos, los objetos se deslizarían en
+  // bloque como sobre hielo. En una caja de verdad el fondo no es plano
+  // y cada objeto apoya distinto: golpecitos al azar en un punto a lo
+  // largo de cada uno (más seguidos y fuertes cuanto más se sacude) los
+  // hacen saltar, girar y rodar cada uno a su manera.
+  _traqueteo(mag, dt) {
+    const f = Math.min(1, (mag - UMBRAL) / 14);
+    const prob = f * dt * 7;
+    for (const c of this.mundo.cuerpos) {
+      if (c.cinematico || Math.random() > prob) continue;
+      const largo = c.medias[0] + c.radio;
+      _p.set((Math.random() * 2 - 1) * largo * 0.9, -c.medias[1] - c.radio, 0)
+        .applyQuaternion(_q.set(c.qx, c.qy, c.qz, c.qw));
+      const v = 12 + 55 * f * Math.random(); // cm/s
+      this.mundo.impulso(c, c.x + _p.x, c.y + _p.y, c.z + _p.z,
+        (Math.random() - 0.5) * c.masa * v * 0.6, c.masa * v, (Math.random() - 0.5) * c.masa * v * 0.6);
     }
   }
 }
