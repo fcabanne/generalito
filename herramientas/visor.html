@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visor de objetos</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #bdbfa9; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #info { position: fixed; left: 8px; top: 6px; font: 11px/1.3 ui-monospace, Menlo, monospace; color: #1c1b19; opacity: .7; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="lienzo"></canvas>
+  <div id="info"></div>
+  <script type="module" src="./src/visor.js"></script>
+</body>
+</html>

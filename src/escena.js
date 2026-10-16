@@ -32,12 +32,13 @@ float softbox(vec3 d, vec3 c, vec3 up, vec2 size, float blur) {
 
 // El estudio: una esfera grande vista desde adentro, pintada por un
 // shader. PMREM la convierte en el mapa de entorno.
-export function crearEstudio(renderer) {
-  const fondo = new THREE.Color(FONDO_SRGB); // three lo pasa a lineal
+// relleno: intensidad del cartón de relleno de abajo a la derecha
+export function crearEstudio(renderer, { fondo: fondoSrgb = FONDO_SRGB, relleno = 0.7 } = {}) {
+  const fondo = new THREE.Color(fondoSrgb); // three lo pasa a lineal
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: { uFondo: { value: new THREE.Vector3(fondo.r, fondo.g, fondo.b) }, uLuz: { value: LUZ.clone() } },
+    uniforms: { uFondo: { value: new THREE.Vector3(fondo.r, fondo.g, fondo.b) }, uLuz: { value: LUZ.clone() }, uRelleno: { value: relleno } },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
       void main() {
@@ -47,6 +48,7 @@ export function crearEstudio(renderer) {
     fragmentShader: /* glsl */ `
       uniform vec3 uFondo;
       uniform vec3 uLuz;
+      uniform float uRelleno;
       varying vec3 vDir;
       ${GLSL_SOFTBOX}
       void main() {
@@ -65,7 +67,7 @@ export function crearEstudio(renderer) {
         // de arriba lo refleja con un degradado distinto según dónde esté
         col += vec3(1.0, 0.99, 0.97) * 2.4 * softbox(d, normalize(vec3(-0.3, 1.0, -0.42)), vec3(0.0, 0.0, -1.0), vec2(0.32, 0.28), 0.45);
         // cartón de relleno abajo a la derecha, apenas frío
-        col += vec3(0.93, 0.96, 1.0) * 0.7 * softbox(d, normalize(vec3(0.5, 0.35, 0.8)), vec3(0.0, 1.0, 0.0), vec2(0.6, 0.3), b * 3.0);
+        col += vec3(0.93, 0.96, 1.0) * uRelleno * softbox(d, normalize(vec3(0.5, 0.35, 0.8)), vec3(0.0, 1.0, 0.0), vec2(0.6, 0.3), b * 3.0);
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -84,7 +86,10 @@ export function crearEstudio(renderer) {
 // de verdad lo lee con filtrado bilineal. Así lo caro corre en ~¼ de los
 // píxeles y sólo cuando algo se movió.
 export class Piso {
-  constructor(renderer, { calidad = 1 } = {}) {
+  // fondo: color del papel (sRGB); tinte: color de la sombra, como factor
+  // escala: largo de la escena por "lado de dado" (1 en la página de los
+  // dados; con otra unidad, escala los radios de la oclusión y la penumbra)
+  constructor(renderer, { calidad = 1, fondo: fondoSrgb = FONDO_SRGB, tinte = [0.7, 0.665, 0.635], escala = 1, oclusion = 0.5 } = {}) {
     this.renderer = renderer;
     const tamSombra = calidad > 1 ? 2048 : 1024;
     this.rtSombra = new THREE.WebGLRenderTarget(tamSombra, tamSombra, {
@@ -105,7 +110,7 @@ export class Piso {
     this.camAbajo = new THREE.OrthographicCamera();
     this.soloProfundidad = new THREE.MeshBasicMaterial({ colorWrite: false });
 
-    const fondo = new THREE.Color(FONDO_SRGB);
+    const fondo = new THREE.Color(fondoSrgb);
     this.uniforms = {
       uSombra: { value: this.rtSombra.depthTexture },
       uLuzVP: { value: new THREE.Matrix4() },
@@ -117,11 +122,13 @@ export class Piso {
       uAbajoMundo: { value: new THREE.Vector2(10, 20) },
       uMin: { value: new THREE.Vector2(-5, -10) },       // rectángulo del piso
       uTam: { value: new THREE.Vector2(10, 20) },
-      uTinte: { value: new THREE.Vector3(0.7, 0.665, 0.635) },
+      uTinte: { value: new THREE.Vector3(...tinte) },
       uFondo: { value: new THREE.Vector3(fondo.r, fondo.g, fondo.b) },
       uLuzPiso: { value: this.rtLuz.texture },
       uLuzDir: { value: LUZ.clone() },
       uTamLuz: { value: 0.16 },   // tamaño angular de la luz → penumbra
+      uEscala: { value: escala },
+      uOclusion: { value: oclusion },
     };
 
     // paso 1: mapa de luz del piso
@@ -146,6 +153,8 @@ export class Piso {
         uniform vec2 uTam;
         uniform vec3 uTinte;
         uniform float uTamLuz;
+        uniform float uEscala;
+        uniform float uOclusion;
         varying vec2 vUv;
 
         const vec2 POISSON[16] = vec2[16](
@@ -164,7 +173,7 @@ export class Piso {
           if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 1.0;
           float rango = uLuzRango.y - uLuzRango.x;
           // 1) buscar bloqueadores en un radio que alcanza a cubrir la penumbra más ancha
-          float rBusca = 1.6 * uTamLuz * 2.5 / uLuzMundo.x;
+          float rBusca = 1.6 * uTamLuz * 2.5 * uEscala / uLuzMundo.x;
           float blk = 0.0, nb = 0.0;
           float ang = ign(gl_FragCoord.xy) * 6.2831853;
           mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
@@ -175,7 +184,7 @@ export class Piso {
           if (nb < 0.5) return 1.0;
           blk /= nb;
           // 2) penumbra en mundo = distancia al bloqueador × tamaño de la luz
-          float pen = clamp((z - blk) * rango * uTamLuz, 0.02, 0.6) / uLuzMundo.x;
+          float pen = clamp((z - blk) * rango * uTamLuz, 0.02 * uEscala, 0.6 * uEscala) / uLuzMundo.x;
           float s = 0.0;
           for (int i = 0; i < 16; i++) {
             float d = texture2D(uSombra, uv + rot * POISSON[i] * pen).r;
@@ -188,7 +197,7 @@ export class Piso {
         float contacto(vec3 P) {
           float occ = 0.0, peso = 0.0;
           for (int anillo = 0; anillo < 3; anillo++) {
-            float rad = 0.05 + float(anillo) * 0.13;
+            float rad = (0.05 + float(anillo) * 0.13) * uEscala;
             float w = 1.0 - float(anillo) * 0.25;
             for (int i = 0; i < 8; i++) {
               float a = float(i) * 0.785398 + float(anillo) * 0.39;
@@ -200,7 +209,7 @@ export class Piso {
               if (d < 0.9999) {
                 // altura de la cara de abajo del dado sobre el piso
                 float h = uAbajoRango.x + d * (uAbajoRango.y - uAbajoRango.x) - 0.5;
-                occ += w * (1.0 - smoothstep(0.0, 0.3 + rad * 1.6, h));
+                occ += w * (1.0 - smoothstep(0.0, 0.3 * uEscala + rad * 1.6, h));
               }
             }
           }
@@ -212,7 +221,7 @@ export class Piso {
           float s = sombra(P);
           float ao = contacto(P);
           vec3 c = mix(uTinte, vec3(1.0), s);
-          c *= 1.0 - ao * 0.5;
+          c *= 1.0 - ao * uOclusion;
           gl_FragColor = vec4(c, 1.0);
         }`,
     });
