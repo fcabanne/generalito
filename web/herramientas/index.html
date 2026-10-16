@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#BDBFA9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>generalito · herramientas</title>
+  <meta name="description" content="Útiles de dibujo en 3D dentro de una caja: sacudí el celular y se mueven como de verdad.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23bdbfa9'/%3E%3Cpath d='M9 26 L9 9 L11 5 L13 9 L13 26 Z' fill='%23b5381d'/%3E%3Cpath d='M11 5 L10 7.4 L12 7.4 Z' fill='%232e2e2c'/%3E%3Crect x='17' y='6' width='6' height='20' rx='1' fill='%23e2d8bf'/%3E%3Cpath d='M17 9h2.4M17 12h1.6M17 15h2.4M17 18h1.6M17 21h2.4' stroke='%231c1b19' stroke-width='.8'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --fondo: #BDBFA9;
+      --panel: rgba(214, 214, 196, 0.8);
+      --tinta: #1c1b19;
+      --tenue: #5d5f52;
+      --linea: rgba(28, 27, 25, 0.16);
+      --linea-fuerte: rgba(28, 27, 25, 0.42);
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", "Hoefler Text", Georgia, serif;
+      --sans: "Helvetica Neue", Helvetica, "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --margen: 16px;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--fondo); color: var(--tinta); }
+    body {
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+      font: 13px/1.4 var(--sans);
+    }
+    canvas {
+      position: fixed; inset: 0;
+      display: block; width: 100%; height: 100%;
+      touch-action: none;
+      outline: none;
+      opacity: 0;
+      transition: opacity .9s ease;
+    }
+    body.listo canvas { opacity: 1; }
+
+    #ui { position: fixed; inset: 0; pointer-events: none; }
+    .pista {
+      position: absolute;
+      left: 50%; bottom: calc(var(--margen) + 64px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      width: max-content; max-width: calc(100vw - 2 * var(--margen));
+      padding: 9px 14px 10px;
+      text-align: center;
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(10px) saturate(1.1);
+      backdrop-filter: blur(10px) saturate(1.1);
+      border: 1px solid var(--linea);
+      transition: opacity .6s ease, transform .6s ease;
+      opacity: 0;
+      animation: aparecer .8s ease 1.4s forwards, desaparecer .8s ease 9s forwards;
+    }
+    .pista p { margin: 0; font: italic 15px/1.3 var(--serif); }
+    .pista small {
+      display: block; margin-top: 5px;
+      font: 500 9.5px/1.6 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--tenue);
+    }
+    .pista.oculta { opacity: 0 !important; transform: translate(-50%, 6px); animation: none; }
+    @keyframes aparecer { to { opacity: 1; } }
+    @keyframes desaparecer { from { opacity: 1; } to { opacity: 0; } }
+
+    .botones {
+      position: absolute;
+      right: calc(var(--margen) + env(safe-area-inset-right));
+      bottom: calc(var(--margen) + env(safe-area-inset-bottom));
+      display: flex; gap: 8px;
+      opacity: 0;
+      animation: reposo .8s ease 1s forwards;
+      transition: opacity .3s ease;
+    }
+    .botones:hover, .botones:focus-within { opacity: 1 !important; animation: none; }
+    @keyframes reposo { to { opacity: .78; } }
+    .boton {
+      pointer-events: auto;
+      display: inline-flex; align-items: center; gap: 8px;
+      min-height: 44px; min-width: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--linea-fuerte);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      color: var(--tinta);
+      font: 500 10.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+      cursor: pointer;
+      transition: background .2s ease, color .2s ease, opacity .4s ease;
+    }
+    .boton.icono { padding: 0; justify-content: center; }
+    .boton svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+    .boton:active { background: var(--tinta); color: var(--fondo); }
+    .boton:focus-visible { outline: 1px solid var(--tinta); outline-offset: 2px; }
+    .boton .tachado { opacity: 0; transition: opacity .2s; }
+    .boton[aria-pressed="false"] .tachado { opacity: 1; }
+    .boton[aria-pressed="false"] .ondas { opacity: 0; }
+    .boton.oculta { display: none; }
+    @media (hover: hover) { .boton:hover { background: var(--tinta); color: var(--fondo); } }
+    @media (prefers-reduced-motion: reduce) {
+      canvas, .pista, .botones { transition: none; animation: none; opacity: 1; }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="lienzo" role="img" aria-label="Útiles de dibujo en 3D dentro de una caja: lápices, portaminas, pinceles, reglas, gomas y sacapuntas. Sacudí el celular para moverlos."></canvas>
+  <div id="ui">
+    <div class="pista" id="pista">
+      <p>Sacudí el celular</p>
+      <small>Pasá el dedo para empujar · tocá para hacer saltar</small>
+    </div>
+    <div class="botones">
+      <button class="boton" id="b-sacudir" type="button">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="3" width="7" height="14" rx="1.6"/><path d="M3.5 7.5c-.9 1.5-.9 3.5 0 5M16.5 7.5c.9 1.5.9 3.5 0 5"/></svg>
+        <span>Sacudir</span>
+      </button>
+      <button class="boton icono" id="b-ordenar" type="button" aria-label="Ordenar">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5v13M8.5 3.5v13M12 6v10.5M15.5 3.5v6"/><path d="M12 6l-.01 0"/></svg>
+      </button>
+      <button class="boton icono" id="b-sonido" type="button" aria-pressed="true" aria-label="Sonido">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 8h2.6L10 4.8v10.4L6.1 12H3.5z"/><path class="ondas" d="M13 7.4c.9.7 1.4 1.6 1.4 2.6s-.5 1.9-1.4 2.6M15.2 5.4c1.5 1.2 2.3 2.8 2.3 4.6s-.8 3.4-2.3 4.6"/><path class="tachado" d="M13 7.5l4.5 5M17.5 7.5l-4.5 5"/></svg>
+      </button>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
