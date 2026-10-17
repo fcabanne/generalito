@@ -42,7 +42,7 @@ En iOS la sacudida necesita permiso: el botón **Activar sacudida** lo pide. En 
 
 | Gesto | Qué pasa |
 | --- | --- |
-| Inclinar el celular a un lado | El lápiz rojo y el portaminas ruedan hacia el lado que baja (hace falta inclinar más de 7°; la gravedad que sienten es menos de la mitad de la real). |
+| Inclinar el celular a un lado | El lápiz rojo y el portaminas ruedan hacia el lado que baja (hace falta inclinar más de 10°; sienten el 30 % de la gravedad real). |
 | Sacudir | Los mismos dos se mueven, saltan y giran. |
 | **Ordenar** o tecla `O` | Los devuelve a su lugar de la foto. |
 
