@@ -41,7 +41,7 @@ function armarCaja() {
   dz = BORDE_ABAJO - caja.z1;
   mundo.planos = [
     { n: [0, 1, 0], d: 0, tipo: 'piso' },
-    ...caja.paredes.map((p) => ({ ...p, tipo: 'pared' })),
+    ...caja.paredes.map((p) => ({ ...p, tipo: 'pared', material: 'vidrio' })),
     { n: [0, -1, 0], d: -TECHO, tipo: 'pared' },
   ];
   esc.piso.ponerPapel({
