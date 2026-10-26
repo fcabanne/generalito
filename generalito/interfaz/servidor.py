@@ -225,6 +225,8 @@ class Corridas:
             "--minutos", str(minutos),
             "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
             "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
+            # unos 6 exámenes por entrenamiento, entre cada 2 y cada 10 minutos
+            "--evaluar-cada-min", str(max(2.0, min(10.0, minutos / 6))),
         ]  # fmt: skip
         desde = None
         clave = pedido.get("desde", "cero")
