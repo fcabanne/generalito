@@ -14,6 +14,29 @@ Formato:
 
 ---
 
+## 2026-10-26 · Agente v1: PPO, estado crudo y recompensa por anotación
+
+**Contexto:** Facu quiere ir directo al modelo que aprende. La revisión manual de partidas se da por cumplida con los tests (§8, partida de ejemplo y partidas al azar).
+
+**Decisión:**
+
+- **Algoritmo:** PPO con las jugadas ilegales enmascaradas. Una red chica (dos capas ocultas de 256) con dos salidas: un puntaje por cada una de las 135 jugadas y una estimación del puntaje que falta. Juega 256 partidas en paralelo.
+- **Estado (codificación versión 1):** dados one-hot por posición, tiro, servido, las 52 casillas (libre / tachada / puntaje) y turno. No hay variables derivadas como "cuánto falta para el Bonus".
+- **Recompensa:** lo que sube el total con cada anotación, sin descuento (γ = 1). Sumada en la partida es exactamente el puntaje final, así que no es *reward shaping*: no agrega ninguna idea de cómo jugar. Solo le da al agente la señal antes del final de la partida.
+- **Examen:** cada 10 minutos juega 500 partidas fijas (dados reservados) sin azar, siempre con su jugada más probable. Se guarda `modelo.pt` (el último) y `mejor.pt` (el de mejor examen).
+- **Jugador codicioso de referencia:** nunca vuelve a tirar y anota donde más sube el total. Solo sirve para comparar.
+- **PyTorch en CPU.** La red es chica y el cuello de botella es el motor en Python, no la red. En Windows, el PyTorch de PyPI ya es solo CPU.
+
+**Alternativas descartadas:**
+
+- Recompensa solo al final: es lo mismo en esperanza, pero aprende mucho más lento.
+- DQN: con 135 jugadas y máscaras, PPO es más simple y estable.
+- Red en NumPy hecha a mano: evitaría la dependencia, pero el PRD ya eligió PyTorch y en la v2 hace falta.
+
+**Consecuencias:** si el motor resulta lento para entrenar millones de partidas, el próximo paso es jugar en varios procesos o pasar el motor a NumPy vectorizado.
+
+---
+
 ## 2026-10-26 · Interfaz local en el navegador
 
 **Contexto:** Facu prefiere no usar la terminal. Necesita jugar, lanzar simulaciones, pararlas y ver resultados de forma "normal".

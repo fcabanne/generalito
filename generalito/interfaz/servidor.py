@@ -49,11 +49,14 @@ class Mesa:
         self.lock = threading.Lock()
 
     def jugar_al_azar(self, hasta: str) -> None:
+        self.jugar_con(lambda p: self.rng.choice(p.jugadas_legales()), hasta)
+
+    def jugar_con(self, elegir, hasta: str) -> None:
+        """Juega con `elegir(partida) -> jugada` una jugada, el turno o hasta el final."""
         partida = self.juego.partida
         turno = partida.turno
         while not partida.terminada:
-            jugada = self.rng.choice(partida.jugadas_legales())
-            self.juego.aplicar(jugada)
+            self.juego.aplicar(elegir(partida))
             if hasta == "jugada" or (hasta == "turno" and partida.turno != turno):
                 break
 
@@ -168,62 +171,99 @@ class Corridas:
             return True
         return any(c["situacion"] in ("corriendo", "parando") for c in self.listar())
 
-    def lanzar(self, pedido: dict) -> str:
+    def _ejecutar(self, nombre: str, provisoria: dict, modulo: str, args: list[str]) -> str:
         if self.alguna_corriendo():
-            raise ValueError("Ya hay una simulación corriendo. Esperá a que termine o parala.")
+            raise ValueError("Ya hay algo corriendo. Esperá a que termine o paralo.")
+        ruta = self.carpeta / nombre
+        ruta.mkdir(parents=True, exist_ok=True)
+        # Configuración provisoria para que aparezca en la lista enseguida;
+        # el programa la reemplaza por la completa al arrancar.
+        (ruta / "config.json").write_text(json.dumps(provisoria), encoding="utf-8")
+        salida = open(ruta / "salida.log", "w", encoding="utf-8")  # noqa: SIM115
+        self.procesos[nombre] = subprocess.Popen(
+            [sys.executable, "-m", modulo, "--carpeta", str(ruta), *args],
+            stdout=salida,
+            stderr=subprocess.STDOUT,
+            env=os.environ | {"PYTHONUTF8": "1"},
+        )
+        return nombre
+
+    def lanzar(self, pedido: dict) -> str:
         partidas = int(pedido.get("partidas", 10_000))
         if not 1 <= partidas <= 100_000_000:
             raise ValueError("La cantidad de partidas tiene que estar entre 1 y 100.000.000")
-        nombre = datetime.now().strftime("%Y%m%d-%H%M%S-simular")
-        ruta = self.carpeta / nombre
-        ruta.mkdir(parents=True, exist_ok=True)
         d = Limites()
-        # Configuración provisoria para que aparezca en la lista enseguida;
-        # el simulador la reemplaza por la completa al arrancar.
+        minutos = float(pedido.get("max_minutos", d.max_minutos))
         provisoria = {
             "programa": "simular",
             "jugador": "azar",
-            "limites": {
-                "max_partidas": partidas,
-                "max_minutos": pedido.get("max_minutos", d.max_minutos),
-            },
+            "limites": {"max_partidas": partidas, "max_minutos": minutos},
         }
-        (ruta / "config.json").write_text(json.dumps(provisoria), encoding="utf-8")
         args = [
-            sys.executable,
-            "-m",
-            "generalito.simular",
-            "--carpeta",
-            str(ruta),
-            "--partidas",
-            str(partidas),
-            "--semilla",
-            str(int(pedido.get("semilla", 0))),
-            "--registrar-cada",
-            str(int(pedido.get("registrar_cada", 1000))),
-            "--max-minutos",
-            str(float(pedido.get("max_minutos", d.max_minutos))),
-            "--hilos",
-            str(int(pedido.get("hilos", d.hilos_cpu))),
-            "--max-cpu",
-            str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
-            "--max-ram-mb",
-            str(float(pedido.get("max_ram_mb", d.max_ram_mb))),
-            "--max-disco-mb",
-            str(float(pedido.get("max_disco_mb", d.max_disco_mb))),
+            "--partidas", str(partidas),
+            "--semilla", str(int(pedido.get("semilla", 0))),
+            "--registrar-cada", str(int(pedido.get("registrar_cada", 1000))),
+            "--max-minutos", str(minutos),
+            "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
+            "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
+            "--max-ram-mb", str(float(pedido.get("max_ram_mb", d.max_ram_mb))),
+            "--max-disco-mb", str(float(pedido.get("max_disco_mb", d.max_disco_mb))),
             "--min-disco-libre-gb",
             str(float(pedido.get("min_disco_libre_gb", d.min_disco_libre_gb))),
-        ]
-        salida = open(ruta / "salida.log", "w", encoding="utf-8")  # noqa: SIM115
-        self.procesos[nombre] = subprocess.Popen(
-            args, stdout=salida, stderr=subprocess.STDOUT, env=os.environ | {"PYTHONUTF8": "1"}
-        )
-        return nombre
+        ]  # fmt: skip
+        nombre = datetime.now().strftime("%Y%m%d-%H%M%S-simular")
+        return self._ejecutar(nombre, provisoria, "generalito.simular", args)
+
+    def entrenar(self, pedido: dict) -> str:
+        d = Limites()
+        minutos = float(pedido.get("minutos", 60))
+        if not 0 < minutos <= 7 * 24 * 60:
+            raise ValueError("Los minutos tienen que estar entre 1 y una semana")
+        args = [
+            "--minutos", str(minutos),
+            "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
+            "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
+        ]  # fmt: skip
+        desde = None
+        if pedido.get("continuar"):
+            modelos = self.modelos()
+            if modelos:
+                desde = modelos[0]["ruta"]
+                args += ["--desde", desde]
+        provisoria = {
+            "programa": "entrenar",
+            "jugador": "agente",
+            "desde": desde,
+            "limites": {"max_partidas": None, "max_minutos": minutos},
+        }
+        nombre = datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
+        return self._ejecutar(nombre, provisoria, "generalito.agente.entrenar", args)
+
+    def modelos(self) -> list[dict]:
+        """Modelos guardados, del más nuevo al más viejo."""
+        resultado = []
+        if not self.carpeta.exists():
+            return resultado
+        for ruta in sorted(self.carpeta.iterdir(), reverse=True):
+            modelo = ruta / "modelo.pt"
+            if not modelo.exists():
+                continue
+            estado = _leer_json(ruta / "estado.json") or {}
+            evaluaciones = estado.get("evaluaciones") or []
+            resultado.append(
+                {
+                    "nombre": ruta.name,
+                    "ruta": str(modelo),
+                    "promedio": evaluaciones[-1]["promedio"] if evaluaciones else None,
+                    "partidas": estado.get("partidas_totales"),
+                }
+            )
+        return resultado
 
     def parar(self, nombre: str) -> None:
         ruta = self.carpeta / nombre
         if not (ruta / "config.json").exists():
-            raise ValueError(f"No existe la simulación {nombre}")
+            raise ValueError(f"No existe {nombre}")
         (ruta / ARCHIVO_PARAR).touch()
 
 
@@ -246,6 +286,71 @@ def estado_sistema(carpeta: Path) -> dict:
         "temperatura_gpu": temperatura_gpu(),
         "defectos": Limites().como_dict(),
     }
+
+
+# --- Modelo entrenado ---
+
+_cache_red: dict = {}
+
+
+def _red_actual(corridas: Corridas):
+    """La red del modelo más nuevo.
+
+    PyTorch se importa recién acá, para que la página abra rápido.
+    """
+    modelos = corridas.modelos()
+    if not modelos:
+        raise ValueError(
+            "Todavía no hay ningún modelo entrenado. Entrenalo en la pestaña Entrenar."
+        )
+    ruta = Path(modelos[0]["ruta"])
+    clave = (str(ruta), ruta.stat().st_mtime)
+    if _cache_red.get("clave") != clave:
+        from generalito.agente.red import cargar_snapshot
+
+        red, _ = cargar_snapshot(ruta)
+        _cache_red.update(clave=clave, red=red, nombre=modelos[0]["nombre"])
+    return _cache_red["red"]
+
+
+def _elegir(red, partida) -> int:
+    from generalito.agente.red import elegir
+
+    return elegir(red, partida)
+
+
+def sugerencia(mesa: Mesa, corridas: Corridas) -> dict:
+    partida = mesa.juego.partida
+    if partida.terminada or not corridas.modelos():
+        return {"opciones": []}
+    from generalito.agente.red import probabilidades
+
+    probs = probabilidades(_red_actual(corridas), partida)
+    mejores = sorted(range(len(probs)), key=lambda j: -probs[j])[:3]
+    return {
+        "modelo": _cache_red.get("nombre"),
+        "opciones": [
+            {"jugada": j, "texto": _texto_jugada(partida, j), "prob": round(float(probs[j]), 3)}
+            for j in mejores
+            if probs[j] > 0.001
+        ],
+    }
+
+
+def _texto_jugada(partida, jugada: int) -> str:
+    from generalito.motor.jugadas import VolverATirar, decodificar
+
+    accion = decodificar(jugada)
+    if isinstance(accion, VolverATirar):
+        if not accion.guardar:
+            return "Tirar los 5"
+        guardados = "-".join(str(partida.dados[i]) for i in accion.guardar)
+        return f"Guardar {guardados} y tirar el resto"
+    casilla = f"{NOMBRES[accion.categoria]} en {NOMBRES_COLUMNAS[accion.columna]}"
+    if accion.tachar:
+        return f"Tachar {casilla}"
+    valor = dict(partida.anotaciones_legales())[jugada]
+    return f"Anotar {valor} en {casilla}"
 
 
 # --- HTTP ---
@@ -295,6 +400,14 @@ def crear_servidor(puerto: int, carpeta_corridas: Path) -> ThreadingHTTPServer:
                 self._responder(estado_sistema(carpeta_corridas))
             elif partes == ["api", "corridas"]:
                 self._responder(corridas.listar())
+            elif partes == ["api", "modelos"]:
+                self._responder(corridas.modelos())
+            elif (
+                len(partes) == 4 and partes[:2] == ["api", "partidas"] and partes[3] == "sugerencia"
+            ):
+                if mesa := self._mesa(partes[2]):
+                    with mesa.lock:
+                        self._responder(sugerencia(mesa, corridas))
             elif len(partes) == 3 and partes[:2] == ["api", "partidas"]:
                 if mesa := self._mesa(partes[2]):
                     self._responder(mesa.estado())
@@ -317,11 +430,16 @@ def crear_servidor(puerto: int, carpeta_corridas: Path) -> ThreadingHTTPServer:
                             mesa.juego.aplicar(int(pedido["jugada"]))
                         elif partes[3] == "azar":
                             mesa.jugar_al_azar(pedido.get("hasta", "jugada"))
+                        elif partes[3] == "modelo":
+                            red = _red_actual(corridas)
+                            mesa.jugar_con(lambda p: _elegir(red, p), pedido.get("hasta", "jugada"))
                         else:
                             return self._error("Acción desconocida", HTTPStatus.NOT_FOUND)
                         self._responder(mesa.estado())
                 elif partes == ["api", "corridas"]:
                     self._responder({"nombre": corridas.lanzar(pedido)})
+                elif partes == ["api", "entrenamientos"]:
+                    self._responder({"nombre": corridas.entrenar(pedido)})
                 elif (
                     len(partes) == 4 and partes[:2] == ["api", "corridas"] and partes[3] == "parar"
                 ):

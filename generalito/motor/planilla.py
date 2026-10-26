@@ -5,7 +5,6 @@ from enum import IntEnum
 from generalito.motor.categorias import (
     CANTIDAD_CATEGORIAS,
     NOMBRES,
-    NUMEROS,
     Categoria,
     puntaje,
 )
@@ -35,6 +34,7 @@ TACHADA = 0
 
 ORDEN_BAJADA = tuple(Categoria)
 ORDEN_SUBIDA = tuple(reversed(ORDEN_BAJADA))
+_N = CANTIDAD_CATEGORIAS
 
 
 def indice_casilla(columna: Columna, categoria: Categoria) -> int:
@@ -58,14 +58,16 @@ class Planilla:
 
     def casillas_habilitadas(self, columna: Columna) -> list[Categoria]:
         """Casillas libres donde la columna permite anotar o tachar (§3.2)."""
+        base = columna * _N
+        fila = self.casillas[base : base + _N]
         if columna == Columna.BAJA:
             orden = ORDEN_BAJADA
         elif columna == Columna.SUBE:
             orden = ORDEN_SUBIDA
         else:
-            return [c for c in Categoria if self.esta_libre(columna, c)]
+            return [c for c in ORDEN_BAJADA if fila[c] == LIBRE]
         for categoria in orden:
-            if self.esta_libre(columna, categoria):
+            if fila[categoria] == LIBRE:
                 return [categoria]
         return []
 
@@ -75,14 +77,16 @@ class Planilla:
         categoria: Categoria,
         dados: tuple[int, ...],
         ultimo_tiro_servido: bool,
+        puntajes: list[int | None] | None = None,
     ) -> int | None:
         """Puntaje que se anotaría en la casilla, o None si solo se puede tachar.
 
         No verifica que la casilla esté habilitada: eso es casillas_habilitadas().
+        `puntajes` permite pasar ya calculado puntaje(categoría, dados) de las 13.
         """
         if columna == Columna.SERVIDA and not ultimo_tiro_servido:
             return None
-        valor = puntaje(categoria, dados)
+        valor = puntajes[categoria] if puntajes is not None else puntaje(categoria, dados)
         if not valor:  # None, o 0 en un número: solo se puede tachar
             return None
         if categoria == Categoria.MENOR:
@@ -105,14 +109,16 @@ class Planilla:
     # --- Puntaje (§6) ---
 
     def suma_numeros(self, columna: Columna) -> int:
-        return sum(max(self.valor(columna, c), 0) for c in NUMEROS)
+        base = columna * _N
+        return sum(v for v in self.casillas[base : base + 6] if v > 0)
 
     def bonus(self, columna: Columna) -> int:
         suma = self.suma_numeros(columna)
         return suma + 30 if suma >= 60 else suma
 
     def subtotal(self, columna: Columna) -> int:
-        resto = sum(max(self.valor(columna, c), 0) for c in Categoria if c not in NUMEROS)
+        base = columna * _N
+        resto = sum(v for v in self.casillas[base + 6 : base + _N] if v > 0)
         return self.bonus(columna) + resto
 
     def total(self) -> int:

@@ -7,12 +7,14 @@ requires-python = ">=3.11"
 dependencies = [
     "numpy>=2.0",
     "psutil>=6.0",
+    "torch>=2.7",
 ]
 
 [project.scripts]
 generalito-simular = "generalito.simular:main"
 generalito-mostrar = "generalito.mostrar:main"
 generalito = "generalito.interfaz.servidor:main"
+generalito-entrenar = "generalito.agente.entrenar:main"
 
 [dependency-groups]
 dev = [

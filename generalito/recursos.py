@@ -147,13 +147,23 @@ class Guardian:
     def minutos(self) -> float:
         return (time.monotonic() - self.inicio) / 60
 
+    def _ram_bytes(self) -> int:
+        """RAM del proceso más la de sus procesos hijos (por ejemplo, los trabajadores)."""
+        total = self.proceso.memory_info().rss
+        for hijo in self.proceso.children(recursive=True):
+            try:
+                total += hijo.memory_info().rss
+            except psutil.Error:
+                pass
+        return total
+
     def medir(self) -> dict:
         disco = shutil.disk_usage(self.carpeta)
         return {
             "minutos": round(self.minutos(), 2),
             "cpu_sistema_pct": psutil.cpu_percent(),
             "cpu_proceso_pct": self.proceso.cpu_percent(),
-            "ram_proceso_mb": round(self.proceso.memory_info().rss / 2**20, 1),
+            "ram_proceso_mb": round(self._ram_bytes() / 2**20, 1),
             "disco_corrida_mb": round(tamano_carpeta(self.carpeta) / 2**20, 2),
             "disco_libre_gb": round(disco.free / 2**30, 2),
             "temperatura_gpu": temperatura_gpu() if self.limites.usar_gpu else None,

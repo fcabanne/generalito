@@ -113,8 +113,8 @@ class RegistroDecisiones:
 
 
 def leer_registro(carpeta: Path) -> dict[str, np.ndarray]:
-    """Junta todos los bloques de una carpeta en un solo diccionario de arrays."""
-    archivos = sorted(Path(carpeta).glob("registro_[0-9]*.npz"))
+    """Junta todos los bloques de una carpeta (y sus subcarpetas) en un diccionario de arrays."""
+    archivos = sorted(Path(carpeta).rglob("registro_[0-9]*.npz"))  # incluye subcarpetas
     if not archivos:
         return {}
     bloques = [dict(np.load(a)) for a in archivos]

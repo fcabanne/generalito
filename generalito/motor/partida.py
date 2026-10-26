@@ -1,5 +1,6 @@
 """Partida de un bando (v1): turnos, tiros y anotación (REGLAS.md §2 y §4)."""
 
+from generalito.motor.categorias import Categoria, puntaje
 from generalito.motor.dados import CANTIDAD_DADOS, FuenteDados
 from generalito.motor.jugadas import (
     CANTIDAD_JUGADAS,
@@ -54,10 +55,11 @@ class Partida:
     def anotaciones_legales(self) -> list[tuple[int, int]]:
         """Pares (jugada, valor que quedaría en la casilla) de anotar o tachar."""
         opciones = []
+        puntajes = [puntaje(c, self.dados) for c in Categoria]  # una vez por turno, no por casilla
         for columna in Columna:
             for categoria in self.planilla.casillas_habilitadas(columna):
                 valor = self.planilla.puntaje_posible(
-                    columna, categoria, self.dados, self.ultimo_tiro_servido
+                    columna, categoria, self.dados, self.ultimo_tiro_servido, puntajes
                 )
                 if valor is not None:
                     opciones.append((anotar(columna, categoria), valor))

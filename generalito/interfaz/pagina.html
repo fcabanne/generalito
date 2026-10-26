@@ -20,6 +20,8 @@
     --peligro: #c43c3b;
     --peligro-suave: #fbe3e2;
     --barra: #2a78d6;
+    --serie-1: #2a78d6;
+    --serie-2: #eb6834;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -37,6 +39,8 @@
       --peligro: #e66767;
       --peligro-suave: #402020;
       --barra: #3987e5;
+      --serie-1: #3987e5;
+      --serie-2: #d95926;
     }
   }
   * { box-sizing: border-box; }
@@ -137,6 +141,7 @@
   .cifras b { display: block; font-size: 17px; color: var(--texto); }
   .histo { position: relative; margin-top: 10px; }
   .histo svg { width: 100%; height: 140px; display: block; }
+  .histo svg.curva { height: auto; }
   .histo .eje { fill: var(--texto-2); font-size: 11px; }
   .histo rect.hit { fill: transparent; }
   .tooltip {
@@ -153,7 +158,8 @@
 <header>
   <h1>🎲 generalito</h1>
   <nav>
-    <button data-tab="jugar" class="activo">Jugar</button>
+    <button data-tab="entrenar" class="activo">Entrenar</button>
+    <button data-tab="jugar">Jugar</button>
     <button data-tab="simular">Simulaciones</button>
     <button data-tab="ayuda">¿Cómo funciona?</button>
   </nav>
@@ -162,8 +168,23 @@
 <main>
   <div id="error" class="error oculto"></div>
 
+  <!-- ENTRENAR -->
+  <section id="tab-entrenar">
+    <div class="tarjeta">
+      <h2>Entrenar al modelo</h2>
+      <p class="gris chico">El modelo juega solo miles de partidas y aprende de sus resultados. Nadie le enseña cómo jugar.</p>
+      <div class="formulario">
+        <label>Minutos<input id="e-minutos" type="number" value="60" min="1"><span>Frena solo al llegar a este tiempo.</span></label>
+        <label>Núcleos de CPU<input id="e-hilos" type="number" value="2" min="1"><span>Cuántos puede usar.</span></label>
+        <label style="justify-content:center"><span style="font-size:14px;color:var(--texto)"><input id="e-continuar" type="checkbox" checked> Seguir desde el último modelo</span><span>Si no, empieza de cero.</span></label>
+      </div>
+      <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
+    </div>
+    <div id="entrenamientos"></div>
+  </section>
+
   <!-- JUGAR -->
-  <section id="tab-jugar">
+  <section id="tab-jugar" class="oculto">
     <div class="juego">
       <div>
         <div class="tarjeta">
@@ -178,6 +199,16 @@
           <div style="height: 14px"></div>
           <div class="fila">
             <button class="boton principal" id="b-tirar">Tirar</button>
+          </div>
+        </div>
+
+        <div class="tarjeta" id="t-modelo">
+          <h3>El modelo</h3>
+          <div id="sugerencia" class="chico"></div>
+          <div class="fila" style="margin-top:8px">
+            <button class="boton" data-modelo="jugada">Que haga una jugada</button>
+            <button class="boton" data-modelo="turno">El turno</button>
+            <button class="boton" data-modelo="fin">Toda la partida</button>
           </div>
         </div>
 
@@ -297,8 +328,10 @@ async function accion(fn) {
 document.querySelectorAll("nav button").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("activo", x === b));
-    for (const t of ["jugar", "simular", "ayuda"]) $("#tab-" + t).classList.toggle("oculto", t !== b.dataset.tab);
+    for (const t of ["entrenar", "jugar", "simular", "ayuda"]) $("#tab-" + t).classList.toggle("oculto", t !== b.dataset.tab);
     if (b.dataset.tab === "simular") refrescarSimulaciones();
+    if (b.dataset.tab === "entrenar") refrescarEntrenamientos();
+    if (b.dataset.tab === "jugar") pintarSugerencia();
   })
 );
 
@@ -340,7 +373,36 @@ function pintarPartida(p) {
 
   pintarPlanilla(p);
   pintarHistorial(p);
+  document.querySelectorAll("[data-modelo]").forEach((b) => (b.disabled = p.terminada || !hayModelo));
+  pintarSugerencia();
 }
+
+let hayModelo = false;
+async function pintarSugerencia() {
+  const caja = $("#sugerencia");
+  if (!partida) return;
+  try {
+    const s = await api("GET", `/api/partidas/${partida.id}/sugerencia`);
+    hayModelo = s.modelo !== undefined || s.opciones.length > 0;
+    if (!hayModelo) {
+      caja.innerHTML = `<span class="gris">Todavía no hay un modelo entrenado.</span>`;
+    } else if (!s.opciones.length) {
+      caja.innerHTML = "";
+    } else {
+      caja.innerHTML = `<div class="gris" style="margin-bottom:4px">Qué haría (y qué tan seguro está):</div>` +
+        s.opciones.map((o, i) => `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
+          <span style="min-width:44px;font-weight:${i ? 400 : 700}">${Math.round(o.prob * 100)}%</span>
+          <span style="font-weight:${i ? 400 : 700}">${o.texto}</span></div>`).join("");
+    }
+  } catch (e) { caja.innerHTML = `<span class="gris">${e.message}</span>`; }
+  document.querySelectorAll("[data-modelo]").forEach((b) => (b.disabled = partida.terminada || !hayModelo));
+}
+
+document.querySelectorAll("[data-modelo]").forEach((b) =>
+  b.addEventListener("click", () => accion(async () =>
+    pintarPartida(await api("POST", `/api/partidas/${partida.id}/modelo`, { hasta: b.dataset.modelo }))
+  ))
+);
 
 function pintarPlanilla(p) {
   const pl = p.planilla;
@@ -470,12 +532,13 @@ function conectarTooltips(contenedor) {
 const NOMBRE_SITUACION = { corriendo: "Corriendo", parando: "Parando…", terminada: "Terminada", interrumpida: "Interrumpida" };
 
 async function refrescarCorridas() {
-  const corridas = await api("GET", "/api/corridas");
+  const todas = await api("GET", "/api/corridas");
+  const hayActiva = todas.some((c) => c.situacion === "corriendo" || c.situacion === "parando");
+  const corridas = todas.filter((c) => c.config.programa === "simular");
   const caja = $("#corridas");
-  if (!corridas.length) { caja.innerHTML = `<p class="gris">Todavía no hay simulaciones.</p>`; return; }
-  const hayActiva = corridas.some((c) => c.situacion === "corriendo" || c.situacion === "parando");
   $("#b-simular").disabled = hayActiva;
-  $("#b-simular").textContent = hayActiva ? "Hay una simulación corriendo" : "Empezar simulación";
+  $("#b-simular").textContent = hayActiva ? "Hay algo corriendo" : "Empezar simulación";
+  if (!corridas.length) { caja.innerHTML = `<p class="gris">Todavía no hay simulaciones.</p>`; return; }
   caja.innerHTML = corridas.map((c) => {
     const e = c.estado || {};
     const maxP = c.config.limites.max_partidas;
@@ -532,7 +595,135 @@ $("#b-simular").addEventListener("click", () => accion(async () => {
   setTimeout(refrescarCorridas, 800);
 }));
 
-setInterval(() => { if (!$("#tab-simular").classList.contains("oculto")) refrescarSimulaciones(); }, 2500);
+setInterval(() => {
+  if (!$("#tab-simular").classList.contains("oculto")) refrescarSimulaciones();
+  if (!$("#tab-entrenar").classList.contains("oculto")) refrescarEntrenamientos();
+}, 3000);
+
+// --- Entrenar ---
+const CURVA_DER = 110; // lugar a la derecha para los nombres de las referencias
+function curvaSVG(e, id) {
+  const curva = e.curva || [], evals = e.evaluaciones || [], refs = e.referencias || {};
+  const puntos = [...curva, ...evals];
+  if (!puntos.length) return "";
+  const W = 700, H = 240, izq = 40, der = CURVA_DER, arr = 10, aba = 26;
+  const xMin = Math.min(...puntos.map((p) => p.partidas)), xMax = Math.max(...puntos.map((p) => p.partidas), xMin + 1);
+  const ys = [...puntos.map((p) => p.promedio), ...Object.values(refs)];
+  const yMin = Math.floor(Math.min(...ys) / 50) * 50, yMax = Math.ceil(Math.max(...ys) / 50) * 50 + 50;
+  const X = (v) => izq + ((v - xMin) / (xMax - xMin)) * (W - izq - der);
+  const Y = (v) => arr + (1 - (v - yMin) / (yMax - yMin)) * (H - arr - aba);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="curva" data-id="${id}" role="img" aria-label="Curva de aprendizaje">`;
+  const paso = (yMax - yMin) / 4;
+  for (let k = 0; k <= 4; k++) {
+    const v = yMin + k * paso;
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--borde)" stroke-width="1"/>`;
+    svg += `<text x="${izq - 6}" y="${Y(v) + 4}" text-anchor="end" class="eje">${Math.round(v)}</text>`;
+  }
+  svg += `<text x="${izq}" y="${H - 6}" class="eje">${xMin.toLocaleString("es-AR")}</text>`;
+  svg += `<text x="${W - der}" y="${H - 6}" text-anchor="end" class="eje">${xMax.toLocaleString("es-AR")} partidas</text>`;
+  for (const [nombre, v] of Object.entries(refs)) {
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--texto-3)" stroke-dasharray="4 4" stroke-width="1.5"/>`;
+    svg += `<text x="${W - der + 6}" y="${Y(v) + 4}" class="eje">${nombre} ${Math.round(v)}</text>`;
+  }
+  if (curva.length > 1) svg += `<polyline fill="none" stroke="var(--serie-1)" stroke-width="2" stroke-linejoin="round" points="${curva.map((p) => `${X(p.partidas)},${Y(p.promedio)}`).join(" ")}"/>`;
+  for (const p of evals) svg += `<circle cx="${X(p.partidas)}" cy="${Y(p.promedio)}" r="5" fill="var(--serie-2)" stroke="var(--superficie)" stroke-width="2"/>`;
+  svg += `<line class="cruz oculto" y1="${arr}" y2="${H - aba}" stroke="var(--texto-2)" stroke-width="1"/>`;
+  svg += `<rect x="${izq}" y="0" width="${W - izq - der}" height="${H}" fill="transparent" class="zona"/></svg>`;
+  return `<div class="histo">${svg}
+    <div class="fila chico gris" style="gap:16px">
+      <span><span style="display:inline-block;width:14px;height:2px;background:var(--serie-1);vertical-align:middle"></span> Promedio mientras entrena</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--serie-2);vertical-align:middle"></span> Examen (500 partidas fijas, sin azar)</span>
+      <span>- - - Jugadores de referencia</span>
+    </div>
+    <div class="tooltip oculto"></div></div>`;
+}
+
+function conectarCurvas(caja, porId) {
+  caja.querySelectorAll("svg.curva").forEach((svg) => {
+    const e = porId[svg.dataset.id], histo = svg.parentElement, tip = histo.querySelector(".tooltip");
+    const cruz = svg.querySelector(".cruz"), zona = svg.querySelector(".zona");
+    const puntos = [...(e.curva || []).map((p) => ({ ...p, tipo: "entrenando" })), ...(e.evaluaciones || []).map((p) => ({ ...p, tipo: "examen" }))];
+    const xs = puntos.map((p) => p.partidas), xMin = Math.min(...xs), xMax = Math.max(...xs, xMin + 1);
+    zona.addEventListener("mousemove", (ev) => {
+      const r = svg.getBoundingClientRect(), escala = 700 / r.width;
+      const x = (ev.clientX - r.left) * escala;
+      const v = xMin + ((x - 40) / (700 - 40 - CURVA_DER)) * (xMax - xMin);
+      const cerca = puntos.reduce((a, b) => (Math.abs(b.partidas - v) < Math.abs(a.partidas - v) ? b : a));
+      const cx = 40 + ((cerca.partidas - xMin) / (xMax - xMin)) * (700 - 40 - CURVA_DER);
+      cruz.setAttribute("x1", cx); cruz.setAttribute("x2", cx); cruz.classList.remove("oculto");
+      tip.textContent = `${cerca.partidas.toLocaleString("es-AR")} partidas · ${cerca.promedio} puntos (${cerca.tipo})`;
+      const caja2 = histo.getBoundingClientRect();
+      tip.style.left = cx / escala + (r.left - caja2.left) + "px";
+      tip.style.top = ev.clientY - caja2.top - 10 + "px";
+      tip.classList.remove("oculto");
+    });
+    zona.addEventListener("mouseleave", () => { tip.classList.add("oculto"); cruz.classList.add("oculto"); });
+  });
+}
+
+async function refrescarEntrenamientos() {
+  let todas;
+  try { todas = await api("GET", "/api/corridas"); } catch (e) { return mostrarError(e.message); }
+  if (!refrescarEntrenamientos.listo) {
+    try {
+      const s = await api("GET", "/api/sistema");
+      $("#e-hilos").value = s.defectos.hilos_cpu; $("#e-hilos").max = s.nucleos;
+      refrescarEntrenamientos.listo = true;
+    } catch (e) {}
+  }
+  const hayActiva = todas.some((c) => c.situacion === "corriendo" || c.situacion === "parando");
+  $("#b-entrenar").disabled = hayActiva;
+  $("#b-entrenar").textContent = hayActiva ? "Hay algo corriendo" : "Empezar a entrenar";
+  const lista = todas.filter((c) => c.config.programa === "entrenar");
+  const caja = $("#entrenamientos");
+  if (!lista.length) { caja.innerHTML = `<p class="gris">Todavía no hay entrenamientos.</p>`; return; }
+  const porId = {};
+  caja.innerHTML = lista.map((c) => {
+    const e = c.estado || {};
+    porId[c.nombre] = e;
+    const fecha = c.nombre.slice(0, 15).replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, "$3/$2/$1 $4:$5");
+    const r = e.recursos || {};
+    const ultimaEval = (e.evaluaciones || []).slice(-1)[0];
+    const estadoTxt = c.situacion === "corriendo" && !e.curva ? "Preparando…" : (e.pausa && c.situacion === "corriendo" ? "En pausa" : NOMBRE_SITUACION[c.situacion]);
+    return `<div class="tarjeta">
+      <div class="corrida-cab">
+        <div><b>${fecha}</b>${c.config.desde ? ` · <span class="gris">sigue un modelo anterior</span>` : ""}</div>
+        <div class="fila">
+          <span class="estado-pill ${c.situacion}">${estadoTxt}</span>
+          ${c.situacion === "corriendo" ? `<button class="boton peligro" data-parar="${c.nombre}">Parar</button>` : ""}
+        </div>
+      </div>
+      <div class="cifras" style="margin-top:10px">
+        <div>Examen actual<b>${ultimaEval ? ultimaEval.promedio : "–"}</b>puntos de promedio</div>
+        <div>Mejor examen<b>${e.mejor_evaluacion ?? "–"}</b></div>
+        <div>Partidas jugadas<b>${(e.partidas_totales ?? 0).toLocaleString("es-AR")}</b></div>
+        <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
+        <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
+      </div>
+      ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}.</p>` : ""}
+      ${e.motivo ? `<p class="gris chico">Por qué terminó: ${e.motivo}.</p>` : ""}
+      ${curvaSVG(e, c.nombre)}
+    </div>`;
+  }).join("");
+  caja.querySelectorAll("[data-parar]").forEach((b) =>
+    b.addEventListener("click", () => accion(async () => {
+      await api("POST", `/api/corridas/${b.dataset.parar}/parar`);
+      refrescarEntrenamientos();
+    }))
+  );
+  conectarCurvas(caja, porId);
+}
+
+$("#b-entrenar").addEventListener("click", () => accion(async () => {
+  await api("POST", "/api/entrenamientos", {
+    minutos: +$("#e-minutos").value,
+    hilos: +$("#e-hilos").value,
+    continuar: $("#e-continuar").checked,
+  });
+  setTimeout(refrescarEntrenamientos, 800);
+}));
+
+refrescarEntrenamientos();
 
 accion(nuevaPartida);
 </script>

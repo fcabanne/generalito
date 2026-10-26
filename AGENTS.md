@@ -14,14 +14,13 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 
 > Actualizar esta sección al cerrar cada etapa.
 
-- **Etapa:** 2, motor del juego y registro. Plan completo en `docs/PRD.md`, "Plan por etapas".
+- **Etapa:** 4, v1 agente solitario (las etapas 2 y 3 se dan por cumplidas: Facu prefiere avanzar al modelo antes que revisar partidas a mano).
 - **Hecho:**
-  - motor (reglas 1.0) con tests: §8, partida de ejemplo y partidas al azar;
-  - registro de decisiones;
-  - controles de recursos;
-  - simulador con jugador al azar.
-- **Falta para cerrar la etapa 2:** que Facu revise algunas partidas nuevas (`uv run generalito-mostrar --semilla N`).
-- **Próximo paso:** etapa 3, con jugador codicioso, motor rápido en paralelo y evaluación con 10.000 partidas de dados reservados.
+  - motor (reglas 1.0) con tests, registro, controles de recursos;
+  - interfaz en el navegador (Entrenar, Jugar, Simulaciones);
+  - agente PPO (`generalito/agente/`), con examen periódico contra jugadores de referencia (azar y codicioso).
+- **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
+- **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos.
 
 ## Reglas de trabajo
 
@@ -83,6 +82,11 @@ generalito/
   simular.py            comando generalito-simular (jugador al azar)
   mostrar.py            comando generalito-mostrar (una partida para revisar)
   historial.py          partida que anota cada turno (lo usan mostrar y la interfaz)
+  evaluar.py            jugadores de referencia (azar, codicioso) y examen con dados reservados
+  agente/
+    codificacion.py     estado → vector (versión 1)
+    red.py              red PPO, snapshots, probabilidades y elegir
+    entrenar.py         comando generalito-entrenar (PPO)
   interfaz/             interfaz local en el navegador (comando generalito)
     servidor.py         servidor HTTP de la biblioteca estándar, solo en 127.0.0.1
     pagina.html         la página: HTML + JS sin librerías ni internet
@@ -101,6 +105,7 @@ uv run pytest                 # tests
 uv run ruff format . && uv run ruff check .
 uv run generalito-mostrar --semilla 5
 uv run generalito-simular --partidas 10000 --registrar-cada 1000
+uv run generalito-entrenar --minutos 60 [--desde corridas/<x>/modelo.pt]
 ```
 
 Antes de cada commit: `ruff format`, `ruff check` y `pytest` sin errores.
