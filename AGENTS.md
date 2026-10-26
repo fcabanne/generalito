@@ -45,7 +45,8 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
    - `estado.json` con el progreso.
 
    Nada corre sin máximo de partidas o de tiempo. La GPU va apagada salvo que se pida.
-9. **Idioma.** Documentación, commits y conversación en español. En el código, los nombres del dominio van en español (`planilla`, `tirada`, `anotar`, `servida`). Los términos técnicos genéricos pueden ir en inglés.
+9. **Facu usa la interfaz, no la terminal.** Toda función nueva que tenga que usar o mirar (entrenar, evaluar, ver un agente jugar, análisis) se expone también en `generalito/interfaz/`, con textos simples en español. Las simulaciones largas se lanzan como subproceso y la interfaz lee su `estado.json`. Solo una a la vez.
+10. **Idioma.** Documentación, commits y conversación en español. En el código, los nombres del dominio van en español (`planilla`, `tirada`, `anotar`, `servida`). Los términos técnicos genéricos pueden ir en inglés.
 
 ## Principios de diseño (del PRD, aplican cuando haya código)
 
@@ -81,6 +82,12 @@ generalito/
   recursos.py           Limites y Guardian (CPU, RAM, disco, GPU, PARAR, Ctrl+C)
   simular.py            comando generalito-simular (jugador al azar)
   mostrar.py            comando generalito-mostrar (una partida para revisar)
+  historial.py          partida que anota cada turno (lo usan mostrar y la interfaz)
+  interfaz/             interfaz local en el navegador (comando generalito)
+    servidor.py         servidor HTTP de la biblioteca estándar, solo en 127.0.0.1
+    pagina.html         la página: HTML + JS sin librerías ni internet
+Abrir generalito.bat    doble clic en Windows
+Abrir generalito.command  doble clic en Mac/Linux
 tests/
 corridas/               salidas de las corridas (no se versiona)
 ```
@@ -89,6 +96,7 @@ corridas/               salidas de las corridas (no se versiona)
 
 ```bash
 uv sync                       # instalar
+uv run generalito             # interfaz en el navegador
 uv run pytest                 # tests
 uv run ruff format . && uv run ruff check .
 uv run generalito-mostrar --semilla 5

@@ -18,12 +18,15 @@ import json
 import random
 import statistics
 import time
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 from generalito.motor import VERSION_REGLAS, FuenteAzar, Partida
 from generalito.recursos import ARCHIVO_PARAR, Guardian, Limites, aplicar_limites_proceso
 from generalito.registro import LimiteDeDisco, RegistroDecisiones
+
+ANCHO_HISTOGRAMA = 25  # puntos por barra del histograma de estado.json
 
 
 def _argumentos(argv: list[str] | None) -> argparse.Namespace:
@@ -101,12 +104,24 @@ def main(argv: list[str] | None = None) -> int:
             "partidas": len(totales),
             "promedio": round(statistics.fmean(totales), 2) if totales else None,
             "maximo": max(totales, default=None),
+            "minimo": min(totales, default=None),
+            "partidas_por_segundo": round(len(totales) / max(guardian.minutos() * 60, 1e-9), 1),
+            "histograma": {
+                "ancho": ANCHO_HISTOGRAMA,
+                "conteos": dict(
+                    sorted(
+                        Counter(t // ANCHO_HISTOGRAMA * ANCHO_HISTOGRAMA for t in totales).items()
+                    )
+                ),
+            },
             "terminado": final,
             "motivo": motivo,
-            "recursos": guardian.ultima_medicion or guardian.medir(),
+            "pausa": None if final else guardian.pausa,
+            "recursos": guardian.medir() if final else guardian.ultima_medicion or guardian.medir(),
         }
         (carpeta / "estado.json").write_text(json.dumps(estado, indent=2), encoding="utf-8")
 
+    guardian.al_pausar = lambda: escribir_estado(final=False)
     try:
         while motivo is None:
             id_partida = len(totales)

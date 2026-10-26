@@ -14,6 +14,26 @@ Formato:
 
 ---
 
+## 2026-10-26 · Interfaz local en el navegador
+
+**Contexto:** Facu prefiere no usar la terminal. Necesita jugar, lanzar simulaciones, pararlas y ver resultados de forma "normal".
+
+**Decisión:**
+
+- Una página web servida por un servidor local escrito con la biblioteca estándar de Python. Escucha solo en `127.0.0.1` y se abre con `uv run generalito` o con doble clic en `Abrir generalito.bat` / `.command`.
+- La página es un solo HTML con JavaScript, sin librerías externas: anda sin internet.
+- Las simulaciones corren como subproceso de `generalito-simular`. La página lee su `estado.json` y las para creando el archivo `PARAR`. Corre una sola simulación por vez.
+
+**Alternativas descartadas:**
+
+- Tkinter: se ve viejo y cuesta hacerlo cómodo.
+- Streamlit o Gradio: más dependencias, y el modelo de "rehacer toda la página" no se lleva bien con partidas interactivas.
+- Una app de escritorio con Electron: demasiado pesada para esto.
+
+**Consecuencias:** cada etapa nueva (entrenar, evaluar, analizar) suma su pestaña o sección en la misma página.
+
+---
+
 ## 2026-10-26 · Controles de recursos en todo programa largo
 
 **Contexto:** Facu quiere que simular o entrenar nunca sature la compu (CPU, GPU, RAM o disco) y poder frenarlo cuando quiera.

@@ -9,14 +9,8 @@ Uso:
 import argparse
 import random
 
-from generalito.motor import FuenteAzar, Partida
-from generalito.motor.categorias import NOMBRES
-from generalito.motor.jugadas import Anotar, decodificar
-from generalito.motor.planilla import NOMBRES_COLUMNAS
-
-
-def _dados(dados) -> str:
-    return "-".join(str(d) for d in dados)
+from generalito.historial import PartidaConHistorial
+from generalito.motor import FuenteAzar
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,32 +19,13 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     rng = random.Random(args.semilla)
-    partida = Partida(FuenteAzar(args.semilla))
+    juego = PartidaConHistorial(FuenteAzar(args.semilla))
+    while not juego.partida.terminada:
+        juego.aplicar(rng.choice(juego.partida.jugadas_legales()))
     print(f"Partida con decisiones al azar, semilla {args.semilla}.\n")
-    print("| Turno | Tiro 1 | Tiro 2 | Tiro 3 | Anota en | Puntos |")
-    print("| --- | --- | --- | --- | --- | --- |")
-    while not partida.terminada:
-        turno = partida.turno
-        celdas = [_dados(partida.dados)]
-        while True:
-            jugada = rng.choice(partida.jugadas_legales())
-            accion = decodificar(jugada)
-            if isinstance(accion, Anotar):
-                break
-            guardados = [partida.dados[i] for i in accion.guardar]
-            partida.aplicar(jugada)
-            if guardados:
-                nuevos = [partida.dados[i] for i in range(5) if i not in accion.guardar]
-                celdas.append(f"guarda {_dados(guardados)} → {_dados(guardados + nuevos)}")
-            else:
-                celdas.append(f"tira los 5 ★ → {_dados(partida.dados)}")
-        partida.aplicar(jugada)
-        valor = partida.planilla.valor(accion.columna, accion.categoria)
-        celdas += [""] * (3 - len(celdas))
-        destino = f"{NOMBRES_COLUMNAS[accion.columna]} · {NOMBRES[accion.categoria]}"
-        print(f"| {turno} | " + " | ".join(celdas) + f" | {destino} | {valor or 'X'} |")
+    print(juego.tabla_markdown())
     print()
-    print(partida.planilla)
+    print(juego.partida.planilla)
     return 0
 
 

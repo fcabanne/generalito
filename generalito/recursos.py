@@ -118,7 +118,11 @@ class Guardian:
         self.carpeta = carpeta
         self.cada_s = cada_s
         self.inicio = time.monotonic()
-        self._ultima_revision = 0.0
+        # La primera medición se hace después de cada_s: una medición de CPU
+        # pegada al arranque sale inflada y provocaría una pausa falsa.
+        self._ultima_revision = time.monotonic()
+        self.pausa: str | None = None  # motivo, mientras está en pausa
+        self.al_pausar = None  # función opcional que se llama en cada espera
         self._interrupciones = 0
         self.ultima_medicion: dict = {}
         self.proceso = psutil.Process()
@@ -209,9 +213,13 @@ class Guardian:
                 return f"el equipo siguió saturado {pausa:.0f} s ({saturacion})"
             if pausa == 0:
                 print(f"Pausa: {saturacion}. Espero a que se libere...", flush=True)
+            self.pausa = saturacion
+            if self.al_pausar is not None:
+                self.al_pausar()
             time.sleep(5)
             pausa += 5
             self.ultima_medicion = medicion = self.medir()
             if motivo := self._motivo_rapido(partidas) or self._motivo_medido(medicion):
                 return motivo
+        self.pausa = None
         return None

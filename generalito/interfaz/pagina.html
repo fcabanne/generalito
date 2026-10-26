@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>generalito</title>
+<style>
+  :root {
+    --fondo: #f4f3ef;
+    --superficie: #fcfcfb;
+    --borde: #dedcd5;
+    --texto: #0b0b0b;
+    --texto-2: #52514e;
+    --texto-3: #8a8983;
+    --acento: #2a78d6;
+    --acento-suave: #dbe8fa;
+    --acento-texto: #ffffff;
+    --guardado: #1baf7a;
+    --guardado-suave: #d6f2e7;
+    --peligro: #c43c3b;
+    --peligro-suave: #fbe3e2;
+    --barra: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #111110;
+      --superficie: #1a1a19;
+      --borde: #383835;
+      --texto: #f0efec;
+      --texto-2: #c3c2b7;
+      --texto-3: #8a8983;
+      --acento: #3987e5;
+      --acento-suave: #1d3150;
+      --acento-texto: #ffffff;
+      --guardado: #199e70;
+      --guardado-suave: #143a2c;
+      --peligro: #e66767;
+      --peligro-suave: #402020;
+      --barra: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fondo); color: var(--texto);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 12px 20px; background: var(--superficie); border-bottom: 1px solid var(--borde);
+  }
+  header h1 { font-size: 20px; margin: 0; }
+  nav { display: flex; gap: 4px; }
+  nav button {
+    border: 0; background: none; color: var(--texto-2); padding: 8px 14px; border-radius: 8px;
+    font: inherit; cursor: pointer;
+  }
+  nav button.activo { background: var(--acento-suave); color: var(--texto); font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  .tarjeta {
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  h3 { font-size: 15px; margin: 0 0 8px; }
+  .gris { color: var(--texto-2); }
+  .chico { font-size: 13px; }
+  button.boton {
+    font: inherit; border: 1px solid var(--borde); background: var(--superficie); color: var(--texto);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  }
+  button.boton:hover:not(:disabled) { border-color: var(--acento); }
+  button.principal { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); font-weight: 600; }
+  button.peligro { color: var(--peligro); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .fila { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .error { background: var(--peligro-suave); color: var(--texto); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  .oculto { display: none !important; }
+  .scroll { overflow-x: auto; }
+  .juego > div { min-width: 0; }
+  @media (max-width: 500px) {
+    .dado { width: 50px; height: 50px; }
+    .planilla th, .planilla td { padding: 4px 3px; font-size: 13px; }
+    .opcion button { padding: 2px 5px; }
+  }
+
+  /* Jugar */
+  .juego { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .juego { grid-template-columns: 1fr; } }
+  .marcador { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+  .marcador div { font-size: 13px; color: var(--texto-2); }
+  .marcador b { display: block; font-size: 22px; color: var(--texto); }
+  .dados { display: flex; gap: 10px; margin: 6px 0 10px; }
+  .dado {
+    width: 58px; height: 58px; border-radius: 12px; border: 2px solid var(--borde);
+    background: var(--superficie); color: var(--texto); font-size: 28px; font-weight: 700;
+    cursor: pointer; display: grid; place-items: center; position: relative;
+  }
+  .dado.guardado { border-color: var(--guardado); background: var(--guardado-suave); }
+  .dado.guardado::after {
+    content: "guardado"; position: absolute; bottom: -18px; font-size: 11px; font-weight: 500; color: var(--texto-2);
+  }
+  .insignia { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--acento-suave); }
+  table { border-collapse: collapse; width: 100%; }
+  .planilla th, .planilla td { border-bottom: 1px solid var(--borde); padding: 4px 6px; text-align: center; }
+  .planilla th:first-child, .planilla td:first-child { text-align: left; white-space: nowrap; }
+  .planilla tr.calculada td { color: var(--texto-2); font-weight: 600; background: var(--fondo); }
+  .planilla td.vacia { color: var(--texto-3); }
+  .opcion { display: inline-flex; gap: 4px; }
+  .opcion button {
+    font: inherit; font-size: 13px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--acento); background: var(--acento-suave); color: var(--texto);
+  }
+  .opcion button.tachar { border-color: var(--borde); background: var(--superficie); color: var(--texto-2); }
+  .opcion button.tachar:hover { border-color: var(--peligro); color: var(--peligro); }
+  .opcion button:not(.tachar):hover { background: var(--acento); color: var(--acento-texto); }
+  .historial td, .historial th { border-bottom: 1px solid var(--borde); padding: 3px 6px; font-size: 13px; text-align: left; }
+  details summary { cursor: pointer; font-weight: 600; }
+
+  /* Simulaciones */
+  .sistema { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .sistema div { font-size: 13px; color: var(--texto-2); }
+  .sistema b { display: block; font-size: 20px; color: var(--texto); }
+  .formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; margin-bottom: 14px; }
+  .formulario label { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 14px; }
+  .formulario label span { font-weight: 400; font-size: 12px; color: var(--texto-2); }
+  .formulario input {
+    font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde);
+    background: var(--fondo); color: var(--texto);
+  }
+  .corrida-cab { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .progreso { height: 8px; border-radius: 4px; background: var(--fondo); overflow: hidden; margin: 10px 0; border: 1px solid var(--borde); }
+  .progreso div { height: 100%; background: var(--acento); }
+  .cifras { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--texto-2); }
+  .cifras b { display: block; font-size: 17px; color: var(--texto); }
+  .histo { position: relative; margin-top: 10px; }
+  .histo svg { width: 100%; height: 140px; display: block; }
+  .histo .eje { fill: var(--texto-2); font-size: 11px; }
+  .histo rect.hit { fill: transparent; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--texto); color: var(--superficie);
+    font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%);
+  }
+  .estado-pill { font-size: 12px; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--borde); }
+  .estado-pill.corriendo { border-color: var(--guardado); }
+  .estado-pill.corriendo::before { content: "● "; color: var(--guardado); }
+  .ayuda p, .ayuda li { max-width: 70ch; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎲 generalito</h1>
+  <nav>
+    <button data-tab="jugar" class="activo">Jugar</button>
+    <button data-tab="simular">Simulaciones</button>
+    <button data-tab="ayuda">¿Cómo funciona?</button>
+  </nav>
+</header>
+
+<main>
+  <div id="error" class="error oculto"></div>
+
+  <!-- JUGAR -->
+  <section id="tab-jugar">
+    <div class="juego">
+      <div>
+        <div class="tarjeta">
+          <div class="marcador">
+            <div>Turno<b id="m-turno">–</b></div>
+            <div>Tiro<b id="m-tiro">–</b></div>
+            <div>Total<b id="m-total">–</b></div>
+          </div>
+          <div id="m-servido" class="insignia oculto">Último tiro servido ★</div>
+          <p class="gris chico" id="instrucciones">Tocá los dados que querés guardar y tirá el resto, o anotá en una casilla de la planilla.</p>
+          <div class="dados" id="dados"></div>
+          <div style="height: 14px"></div>
+          <div class="fila">
+            <button class="boton principal" id="b-tirar">Tirar</button>
+          </div>
+        </div>
+
+        <div class="tarjeta">
+          <h3>Que juegue el azar</h3>
+          <p class="gris chico">Sirve para avanzar rápido o ver partidas para revisar.</p>
+          <div class="fila">
+            <button class="boton" data-azar="jugada">Una jugada</button>
+            <button class="boton" data-azar="turno">El turno</button>
+            <button class="boton" data-azar="fin">Toda la partida</button>
+          </div>
+        </div>
+
+        <div class="tarjeta">
+          <h3>Partida nueva</h3>
+          <div class="fila">
+            <input id="semilla" type="number" placeholder="semilla (opcional)" style="width: 160px; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde); background: var(--fondo); color: var(--texto);">
+            <button class="boton" id="b-nueva">Empezar</button>
+          </div>
+          <p class="gris chico">Con la misma semilla salen los mismos dados. Semilla actual: <b id="m-semilla">–</b></p>
+        </div>
+      </div>
+
+      <div>
+        <div class="tarjeta">
+          <h2>Planilla</h2>
+          <div class="scroll"><table class="planilla" id="planilla"></table></div>
+          <p class="gris chico">Los botones azules anotan ese puntaje. ✕ tacha la casilla. Baja y Sube solo permiten la próxima casilla de su orden; Servida solo acepta puntaje si el último tiro fue servido.</p>
+        </div>
+        <div class="tarjeta">
+          <details id="det-historial">
+            <summary>Historial de la partida</summary>
+            <div class="scroll"><table class="historial" id="historial"></table></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIMULAR -->
+  <section id="tab-simular" class="oculto">
+    <div class="tarjeta">
+      <h2>Tu compu ahora</h2>
+      <div class="sistema" id="sistema"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Nueva simulación</h2>
+      <p class="gris chico">Juega muchas partidas seguidas. Por ahora el único jugador es el azar: sirve para probar que todo anda y como punto de partida para comparar. Cuando haya agentes entrenados, van a aparecer acá.</p>
+      <div class="formulario">
+        <label>Partidas<input id="f-partidas" type="number" value="10000" min="1"><span>Cuántas partidas jugar como máximo.</span></label>
+        <label>Minutos máximos<input id="f-minutos" type="number" value="10" min="0.1" step="0.5"><span>Frena sola al llegar a este tiempo.</span></label>
+        <label>Guardar 1 de cada<input id="f-registrar" type="number" value="1000" min="0"><span>Partidas que se guardan completas para analizar (0 = ninguna).</span></label>
+        <label>Núcleos de CPU<input id="f-hilos" type="number" value="2" min="1"><span>Cuántos puede usar (cuando haya entrenamiento).</span></label>
+        <label>CPU máxima de la compu (%)<input id="f-cpu" type="number" value="90" min="10" max="100"><span>Si la compu pasa de esto, la simulación se pausa.</span></label>
+        <label>Disco máximo (MB)<input id="f-disco" type="number" value="2000" min="1"><span>Lo máximo que puede ocupar la simulación.</span></label>
+      </div>
+      <button class="boton principal" id="b-simular">Empezar simulación</button>
+    </div>
+
+    <h2>Simulaciones</h2>
+    <div id="corridas"><p class="gris">Todavía no hay simulaciones.</p></div>
+  </section>
+
+  <!-- AYUDA -->
+  <section id="tab-ayuda" class="oculto">
+    <div class="tarjeta ayuda">
+      <h2>¿Cómo funciona esto?</h2>
+      <p>Esta página es la cara de generalito. Corre entera en tu compu: el programa que abriste es un pequeño servidor que solo atiende a este navegador. No usa internet.</p>
+      <h3>Jugar</h3>
+      <p>Una partida de un jugador con las reglas de <code>docs/REGLAS.md</code>. Sirve para revisar que el motor juegue igual que en la familia: si ves algo raro (un puntaje mal, una casilla que debería estar habilitada y no está), anotá la semilla y el turno.</p>
+      <h3>Simulaciones</h3>
+      <ul>
+        <li>Cada simulación corre en segundo plano y se puede parar con el botón <b>Parar</b>: termina la partida en curso y guarda todo.</li>
+        <li>Siempre frena sola al llegar al máximo de partidas o de minutos, si ocupa demasiado disco o si el disco se queda sin lugar.</li>
+        <li>Si la compu está muy cargada, se pausa hasta que se libere.</li>
+        <li>Solo corre una simulación por vez, para no saturar la compu.</li>
+        <li>Los resultados quedan en la carpeta <code>corridas/</code>, aunque cierres esta página.</li>
+      </ul>
+      <h3>¿Y el modelo?</h3>
+      <p>Todavía no existe: estamos en la etapa 2 (motor del juego). Cuando entrenemos (etapa 4), el entrenamiento va a aparecer acá como otra simulación, con su progreso y su curva de aprendizaje, y vas a poder jugar con sus sugerencias.</p>
+      <h3>Cerrar</h3>
+      <p>Cerrá la ventana negra (la terminal) donde dice "generalito está abierto en…". Las simulaciones que estén corriendo siguen hasta su límite; para cortarlas antes, usá Parar.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+const CARAS = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+let partida = null;
+let guardados = new Set();
+
+async function api(metodo, ruta, cuerpo) {
+  const r = await fetch(ruta, {
+    method: metodo,
+    headers: cuerpo ? { "Content-Type": "application/json" } : {},
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+  });
+  const datos = await r.json();
+  if (!r.ok) throw new Error(datos.error || "Error");
+  return datos;
+}
+
+function mostrarError(mensaje) {
+  const caja = $("#error");
+  caja.textContent = mensaje;
+  caja.classList.toggle("oculto", !mensaje);
+}
+
+async function accion(fn) {
+  try { mostrarError(""); await fn(); } catch (e) { mostrarError(e.message); }
+}
+
+// --- Pestañas ---
+document.querySelectorAll("nav button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("activo", x === b));
+    for (const t of ["jugar", "simular", "ayuda"]) $("#tab-" + t).classList.toggle("oculto", t !== b.dataset.tab);
+    if (b.dataset.tab === "simular") refrescarSimulaciones();
+  })
+);
+
+// --- Jugar ---
+function pintarPartida(p) {
+  if (partida && (p.turno !== partida.turno || p.tiro !== partida.tiro || p.id !== partida.id)) guardados = new Set();
+  partida = p;
+  $("#m-turno").textContent = p.terminada ? "Fin" : `${p.turno} / 52`;
+  $("#m-tiro").textContent = p.terminada ? "–" : `${p.tiro} / 3`;
+  $("#m-total").textContent = p.total;
+  $("#m-semilla").textContent = p.semilla;
+  $("#m-servido").classList.toggle("oculto", !p.servido || p.terminada);
+  $("#instrucciones").textContent = p.terminada
+    ? `¡Partida terminada! Total: ${p.total} puntos.`
+    : p.puede_tirar
+      ? "Tocá los dados que querés guardar y tirá el resto, o anotá en una casilla de la planilla."
+      : "Ya hiciste los 3 tiros: anotá en una casilla de la planilla.";
+
+  const dados = $("#dados");
+  dados.innerHTML = "";
+  p.dados.forEach((v, i) => {
+    const d = document.createElement("button");
+    d.className = "dado" + (guardados.has(i) ? " guardado" : "");
+    d.title = `Dado ${i + 1}: ${v}`;
+    d.innerHTML = `<span style="font-size:34px;line-height:1">${CARAS[v]}</span>`;
+    d.disabled = !p.puede_tirar;
+    d.addEventListener("click", () => {
+      guardados.has(i) ? guardados.delete(i) : guardados.add(i);
+      pintarPartida(partida);
+    });
+    dados.appendChild(d);
+  });
+  const bTirar = $("#b-tirar");
+  bTirar.disabled = !p.puede_tirar || guardados.size === 5;
+  bTirar.textContent = guardados.size === 0 ? "Tirar los 5 (servido)" :
+    guardados.size === 5 ? "No queda nada para tirar" : `Tirar ${5 - guardados.size} dado${5 - guardados.size > 1 ? "s" : ""}`;
+  document.querySelectorAll("[data-azar]").forEach((b) => (b.disabled = p.terminada));
+
+  pintarPlanilla(p);
+  pintarHistorial(p);
+}
+
+function pintarPlanilla(p) {
+  const pl = p.planilla;
+  const opciones = {};
+  for (const o of p.opciones) opciones[`${o.categoria}-${o.columna}`] = o;
+  let html = "<tr><th>Categoría</th>" + pl.columnas.map((c) => `<th>${c}</th>`).join("") + "</tr>";
+  pl.categorias.forEach((nombre, cat) => {
+    html += `<tr><td>${nombre}</td>`;
+    pl.columnas.forEach((_, col) => {
+      const v = pl.valores[cat][col];
+      const o = opciones[`${cat}-${col}`];
+      if (v !== null) html += `<td>${v}</td>`;
+      else if (o) {
+        html += `<td><span class="opcion">`;
+        if (o.jugada_puntaje !== null) html += `<button data-jugada="${o.jugada_puntaje}" title="Anotar ${o.puntaje}">${o.puntaje}</button>`;
+        html += `<button class="tachar" data-jugada="${o.jugada_tachar}" title="Tachar">✕</button></span></td>`;
+      } else html += `<td class="vacia">·</td>`;
+    });
+    html += "</tr>";
+    if (cat === 5) {
+      html += `<tr class="calculada"><td>Bonus</td>` +
+        pl.bonus.map((b, i) => `<td title="Suma de 1 a 6: ${pl.suma_numeros[i]}${pl.suma_numeros[i] >= 60 ? " (+30)" : ` (faltan ${60 - pl.suma_numeros[i]} para +30)`}">${b}</td>`).join("") + "</tr>";
+    }
+  });
+  html += `<tr class="calculada"><td>Subtotal</td>` + pl.subtotales.map((s) => `<td>${s}</td>`).join("") + "</tr>";
+  const t = $("#planilla");
+  t.innerHTML = html;
+  t.querySelectorAll("[data-jugada]").forEach((b) =>
+    b.addEventListener("click", () => accion(async () =>
+      pintarPartida(await api("POST", `/api/partidas/${partida.id}/jugada`, { jugada: +b.dataset.jugada }))
+    ))
+  );
+}
+
+function pintarHistorial(p) {
+  let html = "<tr><th>Turno</th><th>Tiro 1</th><th>Tiro 2</th><th>Tiro 3</th><th>Anota en</th><th>Puntos</th></tr>";
+  const filas = [...p.historial].reverse();
+  if (!p.terminada) {
+    html += `<tr class="gris"><td>${p.turno}</td>` + [0, 1, 2].map((i) => `<td>${p.tiros_turno_actual[i] || ""}</td>`).join("") + "<td>(en juego)</td><td></td></tr>";
+  }
+  for (const t of filas) {
+    html += `<tr><td>${t.turno}</td>` + [0, 1, 2].map((i) => `<td>${t.tiros[i] || ""}</td>`).join("") + `<td>${t.anota}</td><td>${t.puntos}</td></tr>`;
+  }
+  $("#historial").innerHTML = html;
+}
+
+$("#b-tirar").addEventListener("click", () => accion(async () => {
+  let mascara = 0;
+  for (const i of guardados) mascara |= 1 << i;
+  const quedan = new Set(guardados);
+  const p = await api("POST", `/api/partidas/${partida.id}/jugada`, { jugada: mascara });
+  partida = null; // los dados guardados siguen guardados en el próximo tiro
+  guardados = quedan;
+  pintarPartida(p);
+}));
+
+document.querySelectorAll("[data-azar]").forEach((b) =>
+  b.addEventListener("click", () => accion(async () =>
+    pintarPartida(await api("POST", `/api/partidas/${partida.id}/azar`, { hasta: b.dataset.azar }))
+  ))
+);
+
+async function nuevaPartida() {
+  const semilla = $("#semilla").value;
+  partida = null;
+  guardados = new Set();
+  pintarPartida(await api("POST", "/api/partidas", { semilla: semilla === "" ? null : +semilla }));
+}
+$("#b-nueva").addEventListener("click", () => accion(nuevaPartida));
+
+// --- Simulaciones ---
+async function refrescarSistema() {
+  const s = await api("GET", "/api/sistema");
+  $("#sistema").innerHTML = `
+    <div>CPU en uso<b>${s.cpu_pct.toFixed(0)}%</b>${s.nucleos} núcleos</div>
+    <div>RAM en uso<b>${s.ram_usada_gb} GB</b>de ${s.ram_total_gb} GB</div>
+    <div>Disco libre<b>${s.disco_libre_gb} GB</b>donde se guardan los resultados</div>
+    <div>Temperatura GPU<b>${s.temperatura_gpu === null ? "–" : s.temperatura_gpu + " °C"}</b>${s.temperatura_gpu === null ? "no se pudo leer" : "placa NVIDIA"}</div>`;
+  if (!refrescarSistema.listo) {
+    $("#f-hilos").value = s.defectos.hilos_cpu;
+    $("#f-hilos").max = s.nucleos;
+    refrescarSistema.listo = true;
+  }
+}
+
+function histograma(estado) {
+  const h = estado && estado.histograma;
+  if (!h || !Object.keys(h.conteos).length) return "";
+  const ancho = h.ancho;
+  const claves = Object.keys(h.conteos).map(Number);
+  const desde = Math.min(...claves), hasta = Math.max(...claves);
+  const barras = [];
+  for (let x = desde; x <= hasta; x += ancho) barras.push([x, h.conteos[x] || 0]);
+  const max = Math.max(...barras.map((b) => b[1]));
+  const W = 600, H = 140, abajo = 18, n = barras.length, paso = W / n, gap = 2;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Histograma de puntajes">`;
+  svg += `<line x1="0" x2="${W}" y1="${H - abajo}" y2="${H - abajo}" stroke="var(--borde)" />`;
+  barras.forEach(([x, c], i) => {
+    const alto = c ? Math.max(2, (c / max) * (H - abajo - 6)) : 0;
+    const bx = i * paso + gap / 2, bw = Math.max(1, paso - gap), by = H - abajo - alto;
+    const r = Math.min(4, bw / 2, alto);
+    if (alto) svg += `<path fill="var(--barra)" d="M${bx},${H - abajo} V${by + r} Q${bx},${by} ${bx + r},${by} H${bx + bw - r} Q${bx + bw},${by} ${bx + bw},${by + r} V${H - abajo} Z" />`;
+    svg += `<rect class="hit" x="${i * paso}" y="0" width="${paso}" height="${H}" data-tip="${x}–${x + ancho - 1} puntos: ${c.toLocaleString("es-AR")} partidas" />`;
+  });
+  svg += `</svg>`;
+  return `<div class="histo"><h3 style="margin-top:6px">Puntaje por partida</h3>${svg}
+    <div class="fila gris chico" style="justify-content:space-between"><span>${desde}</span><span>puntos</span><span>${hasta + ancho}</span></div>
+    <div class="tooltip oculto"></div></div>`;
+}
+
+function conectarTooltips(contenedor) {
+  contenedor.querySelectorAll(".histo").forEach((histo) => {
+    const tip = histo.querySelector(".tooltip");
+    histo.querySelectorAll("rect.hit").forEach((r) => {
+      r.addEventListener("mousemove", (ev) => {
+        const caja = histo.getBoundingClientRect();
+        tip.textContent = r.dataset.tip;
+        tip.style.left = ev.clientX - caja.left + "px";
+        tip.style.top = ev.clientY - caja.top - 8 + "px";
+        tip.classList.remove("oculto");
+      });
+      r.addEventListener("mouseleave", () => tip.classList.add("oculto"));
+    });
+  });
+}
+
+const NOMBRE_SITUACION = { corriendo: "Corriendo", parando: "Parando…", terminada: "Terminada", interrumpida: "Interrumpida" };
+
+async function refrescarCorridas() {
+  const corridas = await api("GET", "/api/corridas");
+  const caja = $("#corridas");
+  if (!corridas.length) { caja.innerHTML = `<p class="gris">Todavía no hay simulaciones.</p>`; return; }
+  const hayActiva = corridas.some((c) => c.situacion === "corriendo" || c.situacion === "parando");
+  $("#b-simular").disabled = hayActiva;
+  $("#b-simular").textContent = hayActiva ? "Hay una simulación corriendo" : "Empezar simulación";
+  caja.innerHTML = corridas.map((c) => {
+    const e = c.estado || {};
+    const maxP = c.config.limites.max_partidas;
+    const pct = maxP ? Math.min(100, (100 * (e.partidas || 0)) / maxP) : 0;
+    const fecha = c.nombre.slice(0, 15).replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, "$3/$2/$1 $4:$5");
+    const r = e.recursos || {};
+    return `<div class="tarjeta">
+      <div class="corrida-cab">
+        <div><b>${fecha}</b> · <span class="gris">jugador: ${c.config.jugador}</span></div>
+        <div class="fila">
+          <span class="estado-pill ${c.situacion}">${e.pausa && c.situacion === "corriendo" ? "En pausa" : NOMBRE_SITUACION[c.situacion]}</span>
+          ${c.situacion === "corriendo" ? `<button class="boton peligro" data-parar="${c.nombre}">Parar</button>` : ""}
+        </div>
+      </div>
+      <div class="progreso"><div style="width:${pct}%"></div></div>
+      <div class="cifras">
+        <div>Partidas<b>${(e.partidas || 0).toLocaleString("es-AR")} / ${maxP.toLocaleString("es-AR")}</b></div>
+        <div>Promedio<b>${e.promedio ?? "–"}</b></div>
+        <div>Mejor<b>${e.maximo ?? "–"}</b></div>
+        <div>Peor<b>${e.minimo ?? "–"}</b></div>
+        <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
+        <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
+        <div>RAM<b>${r.ram_proceso_mb ?? "–"} MB</b></div>
+        <div>Disco<b>${r.disco_corrida_mb ?? "–"} MB</b></div>
+      </div>
+      ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}. Sigue sola cuando la compu se libere.</p>` : ""}
+      ${e.motivo ? `<p class="gris chico">Por qué terminó: ${e.motivo}.</p>` : ""}
+      ${histograma(e)}
+      <p class="gris chico">Carpeta: corridas/${c.nombre}</p>
+    </div>`;
+  }).join("");
+  caja.querySelectorAll("[data-parar]").forEach((b) =>
+    b.addEventListener("click", () => accion(async () => {
+      await api("POST", `/api/corridas/${b.dataset.parar}/parar`);
+      refrescarCorridas();
+    }))
+  );
+  conectarTooltips(caja);
+}
+
+async function refrescarSimulaciones() {
+  try { await Promise.all([refrescarSistema(), refrescarCorridas()]); } catch (e) { mostrarError(e.message); }
+}
+
+$("#b-simular").addEventListener("click", () => accion(async () => {
+  await api("POST", "/api/corridas", {
+    partidas: +$("#f-partidas").value,
+    max_minutos: +$("#f-minutos").value,
+    registrar_cada: +$("#f-registrar").value,
+    hilos: +$("#f-hilos").value,
+    max_cpu: +$("#f-cpu").value,
+    max_disco_mb: +$("#f-disco").value,
+  });
+  setTimeout(refrescarCorridas, 800);
+}));
+
+setInterval(() => { if (!$("#tab-simular").classList.contains("oculto")) refrescarSimulaciones(); }, 2500);
+
+accion(nuevaPartida);
+</script>
+</body>
+</html>

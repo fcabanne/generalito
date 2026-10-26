@@ -26,7 +26,20 @@ No se le enseñan estrategias: se le dan las reglas y una recompensa, simula mil
 
 ## Cómo usarlo
 
-Hace falta [`uv`](https://docs.astral.sh/uv/).
+La primera vez hay que instalar [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (un instalador de Python). Después:
+
+- **Windows:** doble clic en `Abrir generalito.bat`.
+- **Mac o Linux:** doble clic en `Abrir generalito.command` (o `uv run generalito` en una terminal).
+
+Se abre una página en el navegador con tres pestañas:
+
+- **Jugar:** jugás una partida vos, o dejás que juegue el azar, con la planilla y el historial a la vista.
+- **Simulaciones:** lanzás muchas partidas con límites de tiempo, CPU y disco; ves el progreso en vivo, el uso de tu compu, los resultados y un histograma de puntajes; y las podés parar con un botón.
+- **¿Cómo funciona?:** explicación corta de todo.
+
+Todo corre en tu compu: la página la sirve un programa local que solo atiende a tu navegador. Para cerrarlo, cerrá la ventana negra que se abre junto con la página.
+
+### Desde la terminal
 
 ```bash
 uv sync                                       # instala todo (una sola vez)
@@ -35,7 +48,7 @@ uv run generalito-mostrar --semilla 5         # una partida al azar, turno por t
 uv run generalito-simular --partidas 10000    # muchas partidas, con límites de recursos
 ```
 
-Cada corrida deja en `corridas/<fecha>-simular/` la configuración (`config.json`), el estado (`estado.json`) y el registro de decisiones. Para frenarla: Ctrl+C o crear un archivo `PARAR` en esa carpeta. Ver `uv run generalito-simular --help` para los límites.
+Cada simulación deja en `corridas/<fecha>-simular/` la configuración (`config.json`), el estado (`estado.json`) y el registro de decisiones. Para frenarla: el botón Parar, Ctrl+C o crear un archivo `PARAR` en esa carpeta.
 
 ## Stack
 
