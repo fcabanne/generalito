@@ -130,6 +130,10 @@
   .formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; margin-bottom: 14px; }
   .formulario label { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 14px; }
   .formulario label span { font-weight: 400; font-size: 12px; color: var(--texto-2); }
+  .formulario select, select, .campo {
+    font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde);
+    background: var(--fondo); color: var(--texto);
+  }
   .formulario input {
     font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde);
     background: var(--fondo); color: var(--texto);
@@ -176,9 +180,18 @@
       <div class="formulario">
         <label>Minutos<input id="e-minutos" type="number" value="60" min="1"><span>Frena solo al llegar a este tiempo.</span></label>
         <label>Núcleos de CPU<input id="e-hilos" type="number" value="2" min="1"><span>Cuántos puede usar.</span></label>
-        <label style="justify-content:center"><span style="font-size:14px;color:var(--texto)"><input id="e-continuar" type="checkbox" checked> Seguir desde el último modelo</span><span>Si no, empieza de cero.</span></label>
+        <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
+    </div>
+    <div class="tarjeta">
+      <h2>Mis modelos</h2>
+      <p class="gris chico">Guardá el modelo con un nombre para no perderlo (por ejemplo "modelo-v1"). Se guarda el que mejor salió en el último entrenamiento.</p>
+      <div class="fila" style="margin-bottom:12px">
+        <input id="m-nombre" type="text" maxlength="40" placeholder="modelo-v1" class="campo" style="width:200px">
+        <button class="boton" id="b-guardar-modelo">Guardar el último modelo</button>
+      </div>
+      <div id="lista-modelos"></div>
     </div>
     <div id="entrenamientos"></div>
   </section>
@@ -204,6 +217,7 @@
 
         <div class="tarjeta" id="t-modelo">
           <h3>El modelo</h3>
+          <div class="fila chico" style="margin-bottom:8px">Juega: <select id="j-modelo"></select></div>
           <div id="sugerencia" class="chico"></div>
           <div class="fila" style="margin-top:8px">
             <button class="boton" data-modelo="jugada">Que haga una jugada</button>
@@ -330,7 +344,8 @@ document.querySelectorAll("nav button").forEach((b) =>
     document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("activo", x === b));
     for (const t of ["entrenar", "jugar", "simular", "ayuda"]) $("#tab-" + t).classList.toggle("oculto", t !== b.dataset.tab);
     if (b.dataset.tab === "simular") refrescarSimulaciones();
-    if (b.dataset.tab === "entrenar") refrescarEntrenamientos();
+    if (b.dataset.tab === "entrenar") { refrescarEntrenamientos(); refrescarModelos(); }
+    if (b.dataset.tab === "jugar") refrescarModelos();
     if (b.dataset.tab === "jugar") pintarSugerencia();
   })
 );
@@ -718,11 +733,48 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
   await api("POST", "/api/entrenamientos", {
     minutos: +$("#e-minutos").value,
     hilos: +$("#e-hilos").value,
-    continuar: $("#e-continuar").checked,
+    desde: $("#e-desde").value,
   });
   setTimeout(refrescarEntrenamientos, 800);
 }));
 
+// --- Mis modelos ---
+function textoModelo(m) {
+  const pts = m.promedio != null ? ` · ${m.promedio} pts` : "";
+  return `${m.nombre}${pts}`;
+}
+
+async function refrescarModelos() {
+  let r;
+  try { r = await api("GET", "/api/modelos"); } catch (e) { return; }
+  const opciones = r.modelos.map((m) => `<option value="${m.clave}">${textoModelo(m)}</option>`).join("");
+  const desde = $("#e-desde"), elegido = desde.value;
+  desde.innerHTML = `<option value="cero">Cero (sin saber nada)</option>` + opciones;
+  desde.value = [...desde.options].some((o) => o.value === elegido) ? elegido : (r.modelos.length ? r.modelos[0].clave : "cero");
+  const j = $("#j-modelo");
+  j.innerHTML = opciones || `<option value="">(ninguno todavía)</option>`;
+  j.value = r.activo;
+  const guardados = r.modelos.filter((m) => m.clave !== "ultimo");
+  $("#lista-modelos").innerHTML = guardados.length
+    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Guardado</th></tr>` +
+      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
+    : `<p class="gris chico">Todavía no guardaste ninguno.</p>`;
+}
+
+$("#b-guardar-modelo").addEventListener("click", () => accion(async () => {
+  const nombre = $("#m-nombre").value.trim();
+  if (!nombre) throw new Error("Escribí un nombre para el modelo.");
+  await api("POST", "/api/modelos", { nombre });
+  $("#m-nombre").value = "";
+  await refrescarModelos();
+}));
+
+$("#j-modelo").addEventListener("change", () => accion(async () => {
+  await api("POST", "/api/modelos/activo", { clave: $("#j-modelo").value });
+  pintarSugerencia();
+}));
+
+refrescarModelos();
 refrescarEntrenamientos();
 
 accion(nuevaPartida);

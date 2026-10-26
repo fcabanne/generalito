@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -135,6 +136,7 @@ class Corridas:
     def __init__(self, carpeta: Path) -> None:
         self.carpeta = carpeta
         self.procesos: dict[str, subprocess.Popen] = {}
+        self.catalogo: Catalogo | None = None  # lo asigna crear_servidor
 
     def _corriendo(self, nombre: str, estado: dict | None, ruta: Path) -> bool:
         proceso = self.procesos.get(nombre)
@@ -225,11 +227,10 @@ class Corridas:
             "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
         ]  # fmt: skip
         desde = None
-        if pedido.get("continuar"):
-            modelos = self.modelos()
-            if modelos:
-                desde = modelos[0]["ruta"]
-                args += ["--desde", desde]
+        clave = pedido.get("desde", "cero")
+        if clave != "cero":
+            desde = str(self.catalogo.ruta(clave))
+            args += ["--desde", desde]
         provisoria = {
             "programa": "entrenar",
             "jugador": "agente",
@@ -239,26 +240,28 @@ class Corridas:
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
         return self._ejecutar(nombre, provisoria, "generalito.agente.entrenar", args)
 
-    def modelos(self) -> list[dict]:
-        """Modelos guardados, del más nuevo al más viejo."""
-        resultado = []
+    def ultimo_entrenado(self) -> dict | None:
+        """El mejor examen del entrenamiento más nuevo que ya tenga un modelo."""
         if not self.carpeta.exists():
-            return resultado
+            return None
         for ruta in sorted(self.carpeta.iterdir(), reverse=True):
-            modelo = ruta / "modelo.pt"
+            modelo = ruta / "mejor.pt"
+            if not modelo.exists():
+                modelo = ruta / "modelo.pt"
             if not modelo.exists():
                 continue
             estado = _leer_json(ruta / "estado.json") or {}
-            evaluaciones = estado.get("evaluaciones") or []
-            resultado.append(
-                {
-                    "nombre": ruta.name,
-                    "ruta": str(modelo),
-                    "promedio": evaluaciones[-1]["promedio"] if evaluaciones else None,
-                    "partidas": estado.get("partidas_totales"),
-                }
-            )
-        return resultado
+            evaluaciones = estado.get("evaluaciones") or [{}]
+            mejor = max(evaluaciones, key=lambda e: e.get("promedio", -1))
+            return {
+                "clave": "ultimo",
+                "nombre": "Último entrenado",
+                "ruta": str(modelo),
+                "promedio": mejor.get("promedio"),
+                "partidas": mejor.get("partidas"),
+                "corrida": ruta.name,
+            }
+        return None
 
     def parar(self, nombre: str) -> None:
         ruta = self.carpeta / nombre
@@ -288,29 +291,89 @@ def estado_sistema(carpeta: Path) -> dict:
     }
 
 
-# --- Modelo entrenado ---
+# --- Modelos ---
 
-_cache_red: dict = {}
+NOMBRE_VALIDO = re.compile(r"^[\w .\-]{1,40}$")
 
 
-def _red_actual(corridas: Corridas):
-    """La red del modelo más nuevo.
+class Catalogo:
+    """Modelos con nombre (carpeta modelos/) más el último entrenado."""
 
-    PyTorch se importa recién acá, para que la página abra rápido.
-    """
-    modelos = corridas.modelos()
-    if not modelos:
-        raise ValueError(
-            "Todavía no hay ningún modelo entrenado. Entrenalo en la pestaña Entrenar."
-        )
-    ruta = Path(modelos[0]["ruta"])
-    clave = (str(ruta), ruta.stat().st_mtime)
-    if _cache_red.get("clave") != clave:
-        from generalito.agente.red import cargar_snapshot
+    def __init__(self, carpeta: Path, corridas: Corridas) -> None:
+        self.carpeta = carpeta
+        self.corridas = corridas
+        self.activo = "ultimo"  # el que juega y sugiere en la pestaña Jugar
+        self._cache: dict = {}
 
-        red, _ = cargar_snapshot(ruta)
-        _cache_red.update(clave=clave, red=red, nombre=modelos[0]["nombre"])
-    return _cache_red["red"]
+    def guardados(self) -> list[dict]:
+        if not self.carpeta.exists():
+            return []
+        lista = []
+        for meta in sorted(self.carpeta.glob("*.json")):
+            datos = _leer_json(meta)
+            if datos and (self.carpeta / f"{meta.stem}.pt").exists():
+                lista.append({**datos, "clave": meta.stem, "ruta": str(meta.with_suffix(".pt"))})
+        return sorted(lista, key=lambda m: m.get("fecha", ""), reverse=True)
+
+    def lista(self) -> list[dict]:
+        ultimo = self.corridas.ultimo_entrenado()
+        return ([ultimo] if ultimo else []) + self.guardados()
+
+    def buscar(self, clave: str) -> dict:
+        for modelo in self.lista():
+            if modelo["clave"] == clave:
+                return modelo
+        raise ValueError("Ese modelo no existe (o todavía no hay ninguno entrenado).")
+
+    def ruta(self, clave: str) -> Path:
+        return Path(self.buscar(clave)["ruta"])
+
+    def guardar(self, nombre: str) -> dict:
+        nombre = nombre.strip()
+        if not NOMBRE_VALIDO.match(nombre) or nombre == "ultimo":
+            raise ValueError("Usá un nombre corto, con letras, números, espacios, - o _.")
+        if (self.carpeta / f"{nombre}.pt").exists():
+            raise ValueError(f"Ya existe un modelo llamado {nombre}.")
+        ultimo = self.corridas.ultimo_entrenado()
+        if ultimo is None:
+            raise ValueError("Todavía no hay ningún modelo entrenado para guardar.")
+        self.carpeta.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ultimo["ruta"], self.carpeta / f"{nombre}.pt")
+        meta = {
+            "nombre": nombre,
+            "promedio": ultimo["promedio"],
+            "partidas": ultimo["partidas"],
+            "fecha": datetime.now().isoformat(timespec="seconds"),
+            "origen": ultimo["corrida"],
+        }
+        (self.carpeta / f"{nombre}.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        return meta
+
+    def elegir_activo(self, clave: str) -> None:
+        self.buscar(clave)
+        self.activo = clave
+
+    def red_activa(self):
+        """La red del modelo activo (PyTorch se importa recién acá: la página abre rápido)."""
+        try:
+            modelo = self.buscar(self.activo)
+        except ValueError:
+            self.activo = "ultimo"
+            modelo = self.buscar("ultimo")
+        ruta = Path(modelo["ruta"])
+        clave = (str(ruta), ruta.stat().st_mtime)
+        if self._cache.get("clave") != clave:
+            from generalito.agente.red import cargar_snapshot
+
+            red, _ = cargar_snapshot(ruta)
+            self._cache.update(clave=clave, red=red, nombre=modelo["nombre"])
+        return self._cache["red"]
+
+    def resumen(self) -> dict:
+        lista = self.lista()
+        claves = {m["clave"] for m in lista}
+        activo = self.activo if self.activo in claves else "ultimo"
+        return {"modelos": lista, "activo": activo}
 
 
 def _elegir(red, partida) -> int:
@@ -319,16 +382,18 @@ def _elegir(red, partida) -> int:
     return elegir(red, partida)
 
 
-def sugerencia(mesa: Mesa, corridas: Corridas) -> dict:
+def sugerencia(mesa: Mesa, catalogo: Catalogo) -> dict:
     partida = mesa.juego.partida
-    if partida.terminada or not corridas.modelos():
+    if not catalogo.lista():
         return {"opciones": []}
+    if partida.terminada:
+        return {"modelo": catalogo.activo, "opciones": []}
     from generalito.agente.red import probabilidades
 
-    probs = probabilidades(_red_actual(corridas), partida)
+    probs = probabilidades(catalogo.red_activa(), partida)
     mejores = sorted(range(len(probs)), key=lambda j: -probs[j])[:3]
     return {
-        "modelo": _cache_red.get("nombre"),
+        "modelo": catalogo.activo,
         "opciones": [
             {"jugada": j, "texto": _texto_jugada(partida, j), "prob": round(float(probs[j]), 3)}
             for j in mejores
@@ -356,9 +421,13 @@ def _texto_jugada(partida, jugada: int) -> str:
 # --- HTTP ---
 
 
-def crear_servidor(puerto: int, carpeta_corridas: Path) -> ThreadingHTTPServer:
+def crear_servidor(
+    puerto: int, carpeta_corridas: Path, carpeta_modelos: Path | None = None
+) -> ThreadingHTTPServer:
     mesas = Mesas()
     corridas = Corridas(carpeta_corridas)
+    catalogo = Catalogo(carpeta_modelos or carpeta_corridas.parent / "modelos", corridas)
+    corridas.catalogo = catalogo
 
     class Manejador(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # silencio en la terminal
@@ -401,13 +470,13 @@ def crear_servidor(puerto: int, carpeta_corridas: Path) -> ThreadingHTTPServer:
             elif partes == ["api", "corridas"]:
                 self._responder(corridas.listar())
             elif partes == ["api", "modelos"]:
-                self._responder(corridas.modelos())
+                self._responder(catalogo.resumen())
             elif (
                 len(partes) == 4 and partes[:2] == ["api", "partidas"] and partes[3] == "sugerencia"
             ):
                 if mesa := self._mesa(partes[2]):
                     with mesa.lock:
-                        self._responder(sugerencia(mesa, corridas))
+                        self._responder(sugerencia(mesa, catalogo))
             elif len(partes) == 3 and partes[:2] == ["api", "partidas"]:
                 if mesa := self._mesa(partes[2]):
                     self._responder(mesa.estado())
@@ -431,13 +500,18 @@ def crear_servidor(puerto: int, carpeta_corridas: Path) -> ThreadingHTTPServer:
                         elif partes[3] == "azar":
                             mesa.jugar_al_azar(pedido.get("hasta", "jugada"))
                         elif partes[3] == "modelo":
-                            red = _red_actual(corridas)
+                            red = catalogo.red_activa()
                             mesa.jugar_con(lambda p: _elegir(red, p), pedido.get("hasta", "jugada"))
                         else:
                             return self._error("Acción desconocida", HTTPStatus.NOT_FOUND)
                         self._responder(mesa.estado())
                 elif partes == ["api", "corridas"]:
                     self._responder({"nombre": corridas.lanzar(pedido)})
+                elif partes == ["api", "modelos"]:
+                    self._responder(catalogo.guardar(str(pedido.get("nombre", ""))))
+                elif partes == ["api", "modelos", "activo"]:
+                    catalogo.elegir_activo(str(pedido.get("clave", "ultimo")))
+                    self._responder(catalogo.resumen())
                 elif partes == ["api", "entrenamientos"]:
                     self._responder({"nombre": corridas.entrenar(pedido)})
                 elif (
@@ -459,10 +533,11 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--puerto", type=int, default=8765)
     p.add_argument("--carpeta", type=Path, default=Path("corridas"))
+    p.add_argument("--modelos", type=Path, default=Path("modelos"), help="modelos con nombre")
     p.add_argument("--no-abrir", action="store_true", help="no abrir el navegador")
     args = p.parse_args(argv)
 
-    servidor = crear_servidor(args.puerto, args.carpeta)
+    servidor = crear_servidor(args.puerto, args.carpeta, args.modelos)
     url = f"http://127.0.0.1:{args.puerto}/"
     print(f"generalito está abierto en {url}")
     print("Dejá esta ventana abierta mientras lo usás. Para cerrarlo: Ctrl+C o cerrar la ventana.")

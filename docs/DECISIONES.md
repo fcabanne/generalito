@@ -14,6 +14,20 @@ Formato:
 
 ---
 
+## 2026-10-26 · Modelos con nombre
+
+**Contexto:** Facu quiere guardar versiones del modelo ("modelo-v1") y poder volver a ellas.
+
+**Decisión:**
+
+- Desde la pestaña Entrenar se guarda el modelo con un nombre. Se copia el `mejor.pt` del último entrenamiento a `modelos/<nombre>.pt`, junto a un `<nombre>.json` con examen, partidas entrenadas, fecha y origen.
+- `modelos/` se versiona en git: cada archivo pesa unos 300 KB y así queda respaldado.
+- En Jugar se elige qué modelo juega y sugiere. En Entrenar se elige desde cuál seguir (o desde cero).
+
+**Consecuencias:** si cambian las reglas o la codificación, esos archivos dejan de cargar (el snapshot guarda ambas versiones y lo avisa).
+
+---
+
 ## 2026-10-26 · Agente v1: PPO, estado crudo y recompensa por anotación
 
 **Contexto:** Facu quiere ir directo al modelo que aprende. La revisión manual de partidas se da por cumplida con los tests (§8, partida de ejemplo y partidas al azar).

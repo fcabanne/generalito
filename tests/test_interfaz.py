@@ -68,7 +68,7 @@ def test_simulacion_desde_la_interfaz(url):
     # Solo una a la vez
     codigo, error = pedir(url, "/api/corridas", {"partidas": 50})
     assert codigo == 400 and "corriendo" in error["error"]
-    for _ in range(100):
+    for _ in range(300):  # hasta 60 s, por si la máquina está ocupada
         _, corridas = pedir(url, "/api/corridas")
         if corridas[0]["situacion"] == "terminada":
             break
@@ -80,3 +80,41 @@ def test_simulacion_desde_la_interfaz(url):
 
     codigo, s = pedir(url, "/api/sistema")
     assert codigo == 200 and s["nucleos"] >= 1
+
+
+def test_modelos_con_nombre(tmp_path):
+    torch = pytest.importorskip("torch")  # noqa: F841
+    from generalito.agente.red import Red, guardar_snapshot
+
+    corridas = tmp_path / "corridas"
+    entrenamiento = corridas / "20260101-000000-entrenar"
+    guardar_snapshot(Red(16), entrenamiento / "mejor.pt", {"partidas_entrenadas": 100})
+    (entrenamiento / "estado.json").write_text(
+        json.dumps({"evaluaciones": [{"partidas": 100, "promedio": 512.5}]})
+    )
+    servidor = crear_servidor(0, corridas, tmp_path / "modelos")
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{servidor.server_address[1]}"
+    try:
+        _, r = pedir(url, "/api/modelos")
+        assert [m["clave"] for m in r["modelos"]] == ["ultimo"] and r["activo"] == "ultimo"
+
+        codigo, meta = pedir(url, "/api/modelos", {"nombre": "modelo-v1"})
+        assert codigo == 200 and meta["promedio"] == 512.5
+        assert (tmp_path / "modelos" / "modelo-v1.pt").exists()
+        codigo, error = pedir(url, "/api/modelos", {"nombre": "modelo-v1"})
+        assert codigo == 400 and "Ya existe" in error["error"]
+        codigo, _ = pedir(url, "/api/modelos", {"nombre": "../malo"})
+        assert codigo == 400
+
+        _, r = pedir(url, "/api/modelos/activo", {"clave": "modelo-v1"})
+        assert r["activo"] == "modelo-v1" and len(r["modelos"]) == 2
+
+        _, p = pedir(url, "/api/partidas", {"semilla": 1})
+        _, s = pedir(url, f"/api/partidas/{p['id']}/sugerencia")
+        assert s["modelo"] == "modelo-v1" and s["opciones"]
+        _, p = pedir(url, f"/api/partidas/{p['id']}/modelo", {"hasta": "fin"})
+        assert p["terminada"]
+    finally:
+        servidor.shutdown()
+        servidor.server_close()

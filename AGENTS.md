@@ -18,7 +18,8 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 - **Hecho:**
   - motor (reglas 1.0) con tests, registro, controles de recursos;
   - interfaz en el navegador (Entrenar, Jugar, Simulaciones);
-  - agente PPO (`generalito/agente/`), con examen periódico contra jugadores de referencia (azar y codicioso).
+  - agente PPO (`generalito/agente/`), con examen periódico contra jugadores de referencia (azar y codicioso);
+  - modelos con nombre desde la interfaz (`modelos/`).
 - **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
 - **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos.
 
@@ -94,6 +95,7 @@ Abrir generalito.bat    doble clic en Windows
 Abrir generalito.command  doble clic en Mac/Linux
 tests/
 corridas/               salidas de las corridas (no se versiona)
+modelos/                modelos con nombre (<nombre>.pt + <nombre>.json); sí se versiona
 ```
 
 ## Comandos
