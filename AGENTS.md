@@ -14,10 +14,14 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 
 > Actualizar esta sección al cerrar cada etapa.
 
-- **Etapa:** 1 (reglas) cumplida; sigue la 2, motor del juego y registro. Plan completo en `docs/PRD.md`, "Plan por etapas".
-- **Código:** todavía no hay. Las herramientas ya están elegidas (ver "Herramientas" más abajo), pero el entorno no está armado.
-- **Bloqueante:** ninguno. Lo único pendiente de las reglas (orden de turnos con varios bandos) es para la v2.
-- **Próximo paso:** el motor del juego con tests. Los casos de `docs/REGLAS.md` §8 y la partida de `docs/PARTIDA_EJEMPLO.md` sirven de base para los tests.
+- **Etapa:** 2, motor del juego y registro. Plan completo en `docs/PRD.md`, "Plan por etapas".
+- **Hecho:**
+  - motor (reglas 1.0) con tests: §8, partida de ejemplo y partidas al azar;
+  - registro de decisiones;
+  - controles de recursos;
+  - simulador con jugador al azar.
+- **Falta para cerrar la etapa 2:** que Facu revise algunas partidas nuevas (`uv run generalito-mostrar --semilla N`).
+- **Próximo paso:** etapa 3, con jugador codicioso, motor rápido en paralelo y evaluación con 10.000 partidas de dados reservados.
 
 ## Reglas de trabajo
 
@@ -34,7 +38,14 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
    - sin comentarios de estrategia en `docs/REGLAS.md`.
 
    Los baselines y las metas (por ejemplo, la familia suele hacer entre 950 y 1050 puntos) solo sirven para evaluar. Ver "Sin sesgo humano" en el PRD.
-8. **Idioma.** Documentación, commits y conversación en español. En el código, los nombres del dominio van en español (`planilla`, `tirada`, `anotar`, `servida`). Los términos técnicos genéricos pueden ir en inglés.
+8. **Cuidar el equipo de Facu.** Todo programa que corra muchas partidas o entrene sigue el esqueleto de `generalito/simular.py`:
+   - `Limites` + `aplicar_limites_proceso()` al arrancar, antes de importar PyTorch;
+   - `Guardian.revisar()` entre lotes;
+   - registro con límite de disco;
+   - `estado.json` con el progreso.
+
+   Nada corre sin máximo de partidas o de tiempo. La GPU va apagada salvo que se pida.
+9. **Idioma.** Documentación, commits y conversación en español. En el código, los nombres del dominio van en español (`planilla`, `tirada`, `anotar`, `servida`). Los términos técnicos genéricos pueden ir en inglés.
 
 ## Principios de diseño (del PRD, aplican cuando haya código)
 
@@ -50,17 +61,49 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 ## Estructura del repo
 
 ```
-README.md          presentación del proyecto
-AGENTS.md          este archivo
-CLAUDE.md          importa AGENTS.md (para Claude Code)
+README.md               presentación y cómo usarlo
+AGENTS.md               este archivo
+CLAUDE.md               importa AGENTS.md (para Claude Code)
+pyproject.toml          proyecto uv: dependencias, comandos, pytest y ruff
 docs/
-  PRD.md           documento de producto
-  REGLAS.md        reglas del juego (fuente de verdad)
-  PARTIDA_EJEMPLO.md  partida completa de ejemplo, turno por turno
-  DECISIONES.md    registro de decisiones
+  PRD.md                documento de producto
+  REGLAS.md             reglas del juego (fuente de verdad)
+  PARTIDA_EJEMPLO.md    partida completa de ejemplo (se usa en los tests)
+  DECISIONES.md         registro de decisiones
+generalito/
+  motor/                reglas puras, sin NumPy ni PyTorch
+    categorias.py       categorías y puntaje (§5)
+    planilla.py         columnas, restricciones, Menor/Mayor, Bonus y total
+    dados.py            fuentes de dados: azar, reservada, guionada
+    jugadas.py          codificación de las 135 jugadas
+    partida.py          turnos, tiros y jugadas legales de un bando
+  registro.py           registro de decisiones en .npz con límite de disco
+  recursos.py           Limites y Guardian (CPU, RAM, disco, GPU, PARAR, Ctrl+C)
+  simular.py            comando generalito-simular (jugador al azar)
+  mostrar.py            comando generalito-mostrar (una partida para revisar)
+tests/
+corridas/               salidas de las corridas (no se versiona)
 ```
 
-Cuando arranque el código, documentar acá la estructura real, cómo instalar, cómo correr los tests y cómo entrenar.
+## Comandos
+
+```bash
+uv sync                       # instalar
+uv run pytest                 # tests
+uv run ruff format . && uv run ruff check .
+uv run generalito-mostrar --semilla 5
+uv run generalito-simular --partidas 10000 --registrar-cada 1000
+```
+
+Antes de cada commit: `ruff format`, `ruff check` y `pytest` sin errores.
+
+## API del motor (resumen)
+
+- `Partida(fuente)` arranca con el tiro 1 del turno 1 ya hecho.
+- `partida.jugadas_legales()` devuelve una lista de enteros de 0 a 134. `partida.mascara_legal()` devuelve 135 booleanos.
+- `partida.aplicar(jugada)` ejecuta la jugada y lanza `JugadaIlegal` si no está permitida.
+- El estado se lee de `partida.dados`, `partida.tiro`, `partida.ultimo_tiro_servido`, `partida.turno` y `partida.planilla.casillas`. Las casillas son 52 enteros: -1 libre, 0 tachada, mayor que 0 puntaje.
+- `VERSION_REGLAS` está en `generalito/motor/__init__.py` y tiene que coincidir con `docs/REGLAS.md`.
 
 ## Herramientas
 

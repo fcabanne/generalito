@@ -14,6 +14,40 @@ Formato:
 
 ---
 
+## 2026-10-26 · Controles de recursos en todo programa largo
+
+**Contexto:** Facu quiere que simular o entrenar nunca sature la compu (CPU, GPU, RAM o disco) y poder frenarlo cuando quiera.
+
+**Decisión:** todo programa largo usa `generalito/recursos.py`:
+
+- `Limites` con valores conservadores por defecto: máximo de partidas y de minutos (60), la mitad de los núcleos, prioridad baja, RAM máxima del proceso (4 GB), disco máximo de la corrida (2 GB) y disco libre mínimo (10 GB). La GPU va apagada por defecto, y cuando se use, con la mitad de su memoria y pausa a más de 80 °C.
+- `Guardian` revisa los límites entre lotes. Si el sistema está saturado (CPU o temperatura de la GPU), pausa. Si se alcanza un límite, se crea el archivo `PARAR` o se aprieta Ctrl+C, frena prolijo y guarda lo hecho.
+- El registro verifica el límite de disco antes de escribir cada bloque y no deja archivos a medias.
+- Cada corrida escribe `estado.json` con progreso y recursos, para mirarlo sin interrumpir.
+
+**Alternativas descartadas:** confiar en mirar el administrador de tareas, porque no frena nada solo; contenedores o cgroups, porque son demasiado para una notebook y dependen del sistema operativo.
+
+**Consecuencias:** el entrenamiento (etapa 4) tiene que seguir el mismo esqueleto que `generalito/simular.py`.
+
+---
+
+## 2026-10-26 · Motor: fuente de dados inyectable y 135 jugadas
+
+**Contexto:** había que fijar cómo se representan los dados y las jugadas antes de escribir el motor.
+
+**Decisión:**
+
+- **Fuente de dados.** El motor no tira por su cuenta: le pide a una fuente el valor de cada dado según turno, tiro y posición. Hay tres: al azar con semilla (entrenar), reservada por partida, turno, tiro y posición (evaluar con suerte pareja) y guionada (tests). Los dados no se reordenan, así cada posición es estable.
+- **135 jugadas.** 0 a 30 son volver a tirar: el número es la máscara de posiciones guardadas y 0 es tirar los 5. 31 a 134 son anotar: `31 + 2 × casilla + (0 puntaje, 1 tachar)`, con `casilla = columna × 13 + categoría`. Las ilegales se enmascaran.
+- **Guardar por posición, no por valor.** Es lo más simple y no le sugiere nada al modelo. A cambio hay jugadas equivalentes (guardar "el primer 5" o "el segundo 5").
+- **Un número en 0 es solo tachar.** "Anotar 0" y "tachar" son la misma jugada (REGLAS.md §4), así que anotar con puntaje solo es legal si el puntaje es mayor que 0. Por eso en la planilla una X se guarda como 0 y una casilla libre como -1.
+
+**Alternativas descartadas:** guardar por valor (menos jugadas, pero más lógica y más difícil de reservar dados por posición); que el motor use su propio `random` (no permitiría la evaluación con dados reservados).
+
+**Consecuencias:** si la redundancia de guardar por posición frena el aprendizaje, se puede pasar a guardar por valor en la etapa 3, cambiando la versión de la codificación.
+
+---
+
 ## 2026-10-11 · Plan por etapas con condiciones de paso medibles
 
 **Contexto:** el plan de 7 etapas del PRD original no se había exportado. Facu lo transcribió y se revisó.

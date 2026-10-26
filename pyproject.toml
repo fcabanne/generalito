@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 generalito-simular = "generalito.simular:main"
+generalito-mostrar = "generalito.mostrar:main"
 
 [dependency-groups]
 dev = [

@@ -6,7 +6,7 @@ No se le enseñan estrategias: se le dan las reglas y una recompensa, simula mil
 
 ## Estado
 
-🟢 **Reglas cerradas (versión 1.0).** Todavía no hay código. El próximo paso es el motor del juego. Ver [`docs/REGLAS.md`](docs/REGLAS.md). Ver [`docs/REGLAS.md`](docs/REGLAS.md).
+🟢 **Etapa 2: motor del juego y registro.** El motor, el registro de decisiones y los controles de recursos están hechos y testeados. Falta que Facu revise algunas partidas nuevas. Ver [`docs/REGLAS.md`](docs/REGLAS.md).
 
 ## Hoja de ruta
 
@@ -24,6 +24,19 @@ No se le enseñan estrategias: se le dan las reglas y una recompensa, simula mil
 - [`docs/DECISIONES.md`](docs/DECISIONES.md): registro de decisiones tomadas (y por qué).
 - [`AGENTS.md`](AGENTS.md): contexto y convenciones para sesiones de agentes de código (Claude Code y otros).
 
-## Stack previsto
+## Cómo usarlo
 
-Python, NumPy y PyTorch. Corre en CPU de notebook; sin GPU, sin nube, sin APIs externas, sin modelos preentrenados.
+Hace falta [`uv`](https://docs.astral.sh/uv/).
+
+```bash
+uv sync                                       # instala todo (una sola vez)
+uv run pytest                                 # tests
+uv run generalito-mostrar --semilla 5         # una partida al azar, turno por turno
+uv run generalito-simular --partidas 10000    # muchas partidas, con límites de recursos
+```
+
+Cada corrida deja en `corridas/<fecha>-simular/` la configuración (`config.json`), el estado (`estado.json`) y el registro de decisiones. Para frenarla: Ctrl+C o crear un archivo `PARAR` en esa carpeta. Ver `uv run generalito-simular --help` para los límites.
+
+## Stack
+
+Python, NumPy y (desde la etapa 4) PyTorch. Alcanza con la CPU; la GPU es opcional y acelera. Sin nube, sin APIs externas, sin modelos preentrenados.
