@@ -121,4 +121,9 @@ Antes de cada commit: `ruff format`, `ruff check` y `pytest` sin errores.
 
 ## Pendiente de definir
 
-- Hardware de Facu. Ya se sabe que tiene GPU RTX 5080. Faltan el procesador, la RAM y el sistema operativo para calibrar tiempos y cómo instalar.
+- Sistema operativo de Facu (por las capturas parece Windows; falta confirmarlo).
+
+## Hardware de Facu
+
+- CPU de 24 núcleos lógicos, 31.7 GB de RAM, GPU NVIDIA RTX 5080 (`nvidia-smi` responde: la temperatura se lee bien).
+- Referencia medida: el simulador con jugador al azar hace unas 340 partidas por segundo con un solo núcleo.

@@ -95,6 +95,9 @@
     background: var(--superficie); color: var(--texto); font-size: 28px; font-weight: 700;
     cursor: pointer; display: grid; place-items: center; position: relative;
   }
+  .caras { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); width: 70%; height: 70%; }
+  .caras i { display: block; }
+  .caras i.punto { background: var(--texto); border-radius: 50%; width: 72%; height: 72%; margin: auto; }
   .dado.guardado { border-color: var(--guardado); background: var(--guardado-suave); }
   .dado.guardado::after {
     content: "guardado"; position: absolute; bottom: -18px; font-size: 11px; font-weight: 500; color: var(--texto-2);
@@ -264,7 +267,8 @@
 
 <script>
 const $ = (sel) => document.querySelector(sel);
-const CARAS = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+// Posiciones de los puntos en una grilla de 3×3 (0 arriba a la izquierda, 8 abajo a la derecha)
+const PUNTOS = [[], [4], [0, 8], [0, 4, 8], [0, 2, 6, 8], [0, 2, 4, 6, 8], [0, 2, 3, 5, 6, 8]];
 let partida = null;
 let guardados = new Set();
 
@@ -319,7 +323,8 @@ function pintarPartida(p) {
     const d = document.createElement("button");
     d.className = "dado" + (guardados.has(i) ? " guardado" : "");
     d.title = `Dado ${i + 1}: ${v}`;
-    d.innerHTML = `<span style="font-size:34px;line-height:1">${CARAS[v]}</span>`;
+    d.setAttribute("aria-label", `Dado ${i + 1}: ${v}${guardados.has(i) ? ", guardado" : ""}`);
+    d.innerHTML = `<span class="caras">${[...Array(9)].map((_, k) => `<i class="${PUNTOS[v].includes(k) ? "punto" : ""}"></i>`).join("")}</span>`;
     d.disabled = !p.puede_tirar;
     d.addEventListener("click", () => {
       guardados.has(i) ? guardados.delete(i) : guardados.add(i);
