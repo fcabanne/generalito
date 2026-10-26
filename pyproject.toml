@@ -1,0 +1,33 @@
+[project]
+name = "generalito"
+version = "0.1.0"
+description = "IA que aprende sola a jugar la generala de 4 columnas"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "psutil>=6.0",
+]
+
+[project.scripts]
+generalito-simular = "generalito.simular:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
