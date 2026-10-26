@@ -242,6 +242,28 @@ class Corridas:
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
         return self._ejecutar(nombre, provisoria, "generalito.agente.entrenar", args)
 
+    def analizar(self, pedido: dict) -> str:
+        """Análisis de un modelo, o comparación de dos (pedido: tipo y claves de modelos)."""
+        tipo = pedido.get("tipo")
+        claves = list(pedido.get("modelos") or [])
+        if tipo not in ("analizar", "comparar") or len(claves) != (1 if tipo == "analizar" else 2):
+            raise ValueError("Elegí un modelo para analizar, o dos para comparar.")
+        if tipo == "comparar" and claves[0] == claves[1]:
+            raise ValueError("Elegí dos modelos distintos.")
+        modelos = [self.catalogo.buscar(c) for c in claves]
+        partidas = min(20_000, max(10, int(pedido.get("partidas", 2000))))
+        args = [tipo, "--partidas", str(partidas)]
+        for m in modelos:
+            args += ["--modelo", m["ruta"], "--nombre", m["nombre"]]
+        provisoria = {
+            "programa": tipo,
+            "jugador": " vs ".join(m["nombre"] for m in modelos),
+            "nombres": [m["nombre"] for m in modelos],
+            "limites": {"max_partidas": None, "max_minutos": 30},
+        }
+        nombre = datetime.now().strftime(f"%Y%m%d-%H%M%S-{tipo}")
+        return self._ejecutar(nombre, provisoria, "generalito.analisis", args)
+
     def ultimo_entrenado(self) -> dict | None:
         """El mejor examen del entrenamiento más nuevo que ya tenga un modelo."""
         if not self.carpeta.exists():
@@ -514,6 +536,8 @@ def crear_servidor(
                 elif partes == ["api", "modelos", "activo"]:
                     catalogo.elegir_activo(str(pedido.get("clave", "ultimo")))
                     self._responder(catalogo.resumen())
+                elif partes == ["api", "analisis"]:
+                    self._responder({"nombre": corridas.analizar(pedido)})
                 elif partes == ["api", "entrenamientos"]:
                     self._responder({"nombre": corridas.entrenar(pedido)})
                 elif (

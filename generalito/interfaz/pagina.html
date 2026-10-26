@@ -156,6 +156,18 @@
   .estado-pill.corriendo { border-color: var(--guardado); }
   .estado-pill.corriendo::before { content: "● "; color: var(--guardado); }
   .ayuda p, .ayuda li { max-width: 70ch; }
+  .calor td { border: 2px solid var(--superficie); padding: 6px 8px; text-align: center; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  .calor th { padding: 4px 8px; font-size: 13px; }
+  .calor td:first-child { text-align: left; background: none; white-space: nowrap; }
+  .modos { display: inline-flex; gap: 4px; background: var(--fondo); padding: 3px; border-radius: 8px; border: 1px solid var(--borde); }
+  .modos button { border: 0; background: none; color: var(--texto-2); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .modos button.activo { background: var(--superficie); color: var(--texto); font-weight: 600; }
+  .barras .fila-barra { display: grid; grid-template-columns: 150px 1fr 56px; gap: 8px; align-items: center; margin: 4px 0; font-size: 13px; }
+  .barras .pista { height: 14px; background: var(--fondo); border-radius: 4px; overflow: hidden; }
+  .barras .pista div { height: 100%; background: var(--serie-1); border-radius: 0 4px 4px 0; }
+  .barras .valor { text-align: right; font-variant-numeric: tabular-nums; }
+  .apilada { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; margin: 8px 0; }
+  .dos-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 </style>
 </head>
 <body>
@@ -164,6 +176,7 @@
   <nav>
     <button data-tab="entrenar" class="activo">Entrenar</button>
     <button data-tab="jugar">Jugar</button>
+    <button data-tab="analisis">Análisis</button>
     <button data-tab="simular">Simulaciones</button>
     <button data-tab="ayuda">¿Cómo funciona?</button>
   </nav>
@@ -262,6 +275,23 @@
     </div>
   </section>
 
+  <!-- ANÁLISIS -->
+  <section id="tab-analisis" class="oculto">
+    <div class="formulario">
+      <div class="tarjeta" style="margin:0">
+        <h2>Qué aprendió</h2>
+        <p class="gris chico">El modelo juega 2.000 partidas de examen y se cuenta cada decisión. Tarda alrededor de un minuto.</p>
+        <div class="fila"><select id="a-modelo"></select><button class="boton principal" id="b-analizar">Analizar</button></div>
+      </div>
+      <div class="tarjeta" style="margin:0">
+        <h2>Comparar dos modelos</h2>
+        <p class="gris chico">Juegan las mismas 2.000 partidas, con los mismos dados.</p>
+        <div class="fila"><select id="c-a"></select><span class="gris">contra</span><select id="c-b"></select><button class="boton principal" id="b-comparar">Comparar</button></div>
+      </div>
+    </div>
+    <div id="analisis"></div>
+  </section>
+
   <!-- SIMULAR -->
   <section id="tab-simular" class="oculto">
     <div class="tarjeta">
@@ -342,10 +372,11 @@ async function accion(fn) {
 document.querySelectorAll("nav button").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("activo", x === b));
-    for (const t of ["entrenar", "jugar", "simular", "ayuda"]) $("#tab-" + t).classList.toggle("oculto", t !== b.dataset.tab);
+    for (const t of ["entrenar", "jugar", "analisis", "simular", "ayuda"]) $("#tab-" + t).classList.toggle("oculto", t !== b.dataset.tab);
     if (b.dataset.tab === "simular") refrescarSimulaciones();
     if (b.dataset.tab === "entrenar") { refrescarEntrenamientos(); refrescarModelos(); }
     if (b.dataset.tab === "jugar") refrescarModelos();
+    if (b.dataset.tab === "analisis") { refrescarModelos(); refrescarAnalisis(); }
     if (b.dataset.tab === "jugar") pintarSugerencia();
   })
 );
@@ -503,7 +534,7 @@ async function refrescarSistema() {
   }
 }
 
-function histograma(estado) {
+function histograma(estado, color = "var(--barra)", titulo = "Puntaje por partida") {
   const h = estado && estado.histograma;
   if (!h || !Object.keys(h.conteos).length) return "";
   const ancho = h.ancho;
@@ -519,11 +550,11 @@ function histograma(estado) {
     const alto = c ? Math.max(2, (c / max) * (H - abajo - 6)) : 0;
     const bx = i * paso + gap / 2, bw = Math.max(1, paso - gap), by = H - abajo - alto;
     const r = Math.min(4, bw / 2, alto);
-    if (alto) svg += `<path fill="var(--barra)" d="M${bx},${H - abajo} V${by + r} Q${bx},${by} ${bx + r},${by} H${bx + bw - r} Q${bx + bw},${by} ${bx + bw},${by + r} V${H - abajo} Z" />`;
+    if (alto) svg += `<path fill="${color}" d="M${bx},${H - abajo} V${by + r} Q${bx},${by} ${bx + r},${by} H${bx + bw - r} Q${bx + bw},${by} ${bx + bw},${by + r} V${H - abajo} Z" />`;
     svg += `<rect class="hit" x="${i * paso}" y="0" width="${paso}" height="${H}" data-tip="${x}–${x + ancho - 1} puntos: ${c.toLocaleString("es-AR")} partidas" />`;
   });
   svg += `</svg>`;
-  return `<div class="histo"><h3 style="margin-top:6px">Puntaje por partida</h3>${svg}
+  return `<div class="histo"><h3 style="margin-top:6px">${titulo}</h3>${svg}
     <div class="fila gris chico" style="justify-content:space-between"><span>${desde}</span><span>puntos</span><span>${hasta + ancho}</span></div>
     <div class="tooltip oculto"></div></div>`;
 }
@@ -613,6 +644,7 @@ $("#b-simular").addEventListener("click", () => accion(async () => {
 setInterval(() => {
   if (!$("#tab-simular").classList.contains("oculto")) refrescarSimulaciones();
   if (!$("#tab-entrenar").classList.contains("oculto")) refrescarEntrenamientos();
+  if (!$("#tab-analisis").classList.contains("oculto")) refrescarAnalisis();
 }, 3000);
 
 // --- Entrenar ---
@@ -751,6 +783,12 @@ async function refrescarModelos() {
   const desde = $("#e-desde"), elegido = desde.value;
   desde.innerHTML = `<option value="cero">Cero (sin saber nada)</option>` + opciones;
   desde.value = [...desde.options].some((o) => o.value === elegido) ? elegido : (r.modelos.length ? r.modelos[0].clave : "cero");
+  for (const [id, i] of [["#a-modelo", 0], ["#c-a", 0], ["#c-b", 1]]) {
+    const sel = $(id), antes = sel.value;
+    sel.innerHTML = opciones || `<option value="">(ninguno todavía)</option>`;
+    if ([...sel.options].some((o) => o.value === antes)) sel.value = antes;
+    else if (r.modelos[i]) sel.value = r.modelos[i].clave;
+  }
   const j = $("#j-modelo");
   j.innerHTML = opciones || `<option value="">(ninguno todavía)</option>`;
   j.value = r.activo;
@@ -772,6 +810,118 @@ $("#b-guardar-modelo").addEventListener("click", () => accion(async () => {
 $("#j-modelo").addEventListener("change", () => accion(async () => {
   await api("POST", "/api/modelos/activo", { clave: $("#j-modelo").value });
   pintarSugerencia();
+}));
+
+// --- Análisis ---
+const modoCalor = {}; // por análisis: "puntos" | "tachada" | "turno"
+const MODOS = {
+  puntos: { titulo: "Puntos promedio", clave: "puntos", sufijo: "", max: null },
+  tachada: { titulo: "% de veces tachada", clave: "tachada_pct", sufijo: "%", max: 100 },
+  turno: { titulo: "Turno en que la llena (promedio)", clave: "turno_medio", sufijo: "", max: 52 },
+};
+
+function mapaDeCalor(r, id) {
+  const modo = MODOS[modoCalor[id] || "puntos"];
+  const m = r[modo.clave];
+  const max = modo.max ?? Math.max(1, ...m.flat());
+  let html = `<div class="fila" style="justify-content:space-between;margin:14px 0 6px"><h3 style="margin:0">La planilla</h3>
+    <div class="modos">${Object.entries(MODOS).map(([k, v]) => `<button data-modo="${k}" data-id="${id}" class="${(modoCalor[id] || "puntos") === k ? "activo" : ""}">${v.titulo}</button>`).join("")}</div></div>`;
+  html += `<div class="scroll"><table class="calor"><tr><th></th>${r.columnas_nombres.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+  r.categorias.forEach((cat, k) => {
+    html += `<tr><td>${cat}</td>`;
+    for (let c = 0; c < 4; c++) {
+      const v = m[k][c], p = Math.round(Math.min(1, v / max) * 85);
+      const tip = `${cat} en ${r.columnas_nombres[c]}: ${r.puntos[k][c]} pts promedio · tachada ${r.tachada_pct[k][c]}% · turno ${r.turno_medio[k][c]}`;
+      html += `<td title="${tip}" style="background:color-mix(in oklab, var(--serie-1) ${p}%, var(--superficie));color:${p > 50 ? "#fff" : "var(--texto)"}">${modo.clave === "turno_medio" ? Math.round(v) : v}${modo.sufijo}</td>`;
+    }
+    html += "</tr>";
+  });
+  html += `</table></div><div class="fila chico gris" style="gap:8px;margin-top:6px"><span>${modo.max === 52 ? "turno 1" : "0"}</span>
+    <span style="width:160px;height:10px;border-radius:5px;background:linear-gradient(90deg, var(--superficie), color-mix(in oklab, var(--serie-1) 85%, var(--superficie)));border:1px solid var(--borde)"></span>
+    <span>${modo.max === 52 ? "turno 52" : Math.round(max) + modo.sufijo}</span><span>· pasá el mouse por una casilla para ver todo</span></div>`;
+  return html;
+}
+
+function barras(titulo, etiquetas, valores) {
+  const total = valores.reduce((a, b) => a + b, 0) || 1;
+  const max = Math.max(...valores, 1);
+  return `<div class="barras"><h3 style="margin:14px 0 6px">${titulo}</h3>` +
+    etiquetas.map((e, i) => `<div class="fila-barra"><span>${e}</span><div class="pista"><div style="width:${(100 * valores[i]) / max}%"></div></div><span class="valor">${Math.round((100 * valores[i]) / total)}%</span></div>`).join("") + "</div>";
+}
+
+function tarjetaAnalisis(c) {
+  const e = c.estado || {}, r = e.resultado;
+  const fecha = c.nombre.slice(0, 15).replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, "$3/$2/$1 $4:$5");
+  const titulo = c.config.programa === "comparar" ? `Comparación: ${(c.config.nombres || []).join(" contra ")}` : `Análisis de ${(c.config.nombres || [c.config.jugador])[0]}`;
+  let html = `<div class="tarjeta"><div class="corrida-cab"><div><b>${titulo}</b> · <span class="gris">${fecha}</span></div>
+    <span class="estado-pill ${c.situacion}">${c.situacion === "corriendo" ? (e.etapa || "Preparando…") : NOMBRE_SITUACION[c.situacion]}</span></div>`;
+  if (c.situacion === "corriendo" || c.situacion === "parando") {
+    return html + `<div class="progreso"><div style="width:${Math.round(100 * (e.avance || 0))}%"></div></div></div>`;
+  }
+  if (!r) return html + `<p class="gris chico">${e.motivo || "No terminó."}</p></div>`;
+  if (c.config.programa === "analizar") {
+    html += `<div class="cifras" style="margin-top:10px">
+      <div>Promedio<b>${r.promedio}</b>puntos</div><div>Variación típica<b>±${r.desvio}</b></div>
+      <div>Mejor partida<b>${r.maximo}</b></div><div>Peor partida<b>${r.minimo}</b></div>
+      <div>Anota puntos en Servida<b>${r.servida_con_puntaje_pct}%</b>de sus casillas</div></div>`;
+    html += mapaDeCalor(r, c.nombre);
+    html += `<div class="dos-col"><div>` +
+      barras("En qué tiro anota", ["Tiro 1", "Tiro 2", "Tiro 3"], r.tiro_al_anotar) +
+      barras("Cuántos dados guarda al volver a tirar", ["Ninguno (tira los 5)", "1", "2", "3", "4"], r.dados_guardados) +
+      `</div><div><h3 style="margin:14px 0 6px">Por columna</h3><table class="historial"><tr><th>Columna</th><th>Puntos promedio</th><th>Llega al Bonus</th></tr>` +
+      r.columnas.map((col) => `<tr><td>${col.nombre}</td><td>${col.promedio}</td><td>${col.bonus_pct}% de las partidas</td></tr>`).join("") +
+      `</table>${histograma(r)}</div></div>`;
+  } else {
+    const [a, b] = r.nombres, [ga, em, gb] = r.victorias, n = r.partidas;
+    const pct = (x) => Math.round((100 * x) / n);
+    html += `<div class="cifras" style="margin-top:10px">
+      <div>Gana ${a}<b>${pct(ga)}%</b>${ga.toLocaleString("es-AR")} partidas</div>
+      <div>Empatan<b>${pct(em)}%</b></div>
+      <div>Gana ${b}<b>${pct(gb)}%</b>${gb.toLocaleString("es-AR")} partidas</div>
+      <div>Promedios<b>${r.promedios[0]} / ${r.promedios[1]}</b>diferencia ${r.diferencia_media > 0 ? "+" : ""}${r.diferencia_media}</div>
+      <div>Deciden distinto<b>${r.distintas_por_partida}</b>veces por partida</div></div>
+      <div class="apilada" role="img" aria-label="Partidas ganadas">
+        <div title="Gana ${a}: ${pct(ga)}%" style="flex:${ga};background:var(--serie-1)"></div>
+        <div title="Empate: ${pct(em)}%" style="flex:${em};background:var(--texto-3)"></div>
+        <div title="Gana ${b}: ${pct(gb)}%" style="flex:${gb};background:var(--serie-2)"></div></div>
+      <div class="fila chico gris" style="gap:16px"><span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--serie-1)"></span> gana ${a}</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--texto-3)"></span> empate</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--serie-2)"></span> gana ${b}</span></div>
+      <div class="dos-col">${histograma({ histograma: r.histogramas[0] }, "var(--serie-1)", `Puntajes de ${a}`)}${histograma({ histograma: r.histogramas[1] }, "var(--serie-2)", `Puntajes de ${b}`)}</div>
+      ${barras("En qué tiro deciden distinto", ["Tiro 1", "Tiro 2", "Tiro 3"], r.distintas_por_tiro)}
+      <h3 style="margin:14px 0 6px">Algunas situaciones donde deciden distinto</h3>
+      <div class="scroll"><table class="historial"><tr><th>Turno</th><th>Tiro</th><th>Dados</th><th>${a}</th><th>${b}</th></tr>` +
+      r.ejemplos.map((x) => `<tr><td>${x.turno}</td><td>${x.tiro}</td><td>${x.dados}</td><td>${x.a}</td><td>${x.b}</td></tr>`).join("") + `</table></div>`;
+  }
+  return html + "</div>";
+}
+
+let ultimoAnalisis = "";
+async function refrescarAnalisis(forzar = false) {
+  let todas;
+  try { todas = await api("GET", "/api/corridas"); } catch (e) { return; }
+  const hayActiva = todas.some((c) => c.situacion === "corriendo" || c.situacion === "parando");
+  for (const id of ["#b-analizar", "#b-comparar"]) $(id).disabled = hayActiva;
+  const lista = todas.filter((c) => c.config.programa === "analizar" || c.config.programa === "comparar");
+  const firma = JSON.stringify(lista.map((c) => [c.nombre, c.situacion, c.estado && c.estado.avance])) + JSON.stringify(modoCalor);
+  if (firma === ultimoAnalisis && !forzar) return; // no redibujar si nada cambió
+  ultimoAnalisis = firma;
+  const caja = $("#analisis");
+  caja.innerHTML = lista.length ? lista.map(tarjetaAnalisis).join("") : `<p class="gris">Todavía no hay análisis.</p>`;
+  caja.querySelectorAll("[data-modo]").forEach((b) => b.addEventListener("click", () => {
+    modoCalor[b.dataset.id] = b.dataset.modo;
+    refrescarAnalisis(true);
+  }));
+  conectarTooltips(caja);
+}
+
+$("#b-analizar").addEventListener("click", () => accion(async () => {
+  await api("POST", "/api/analisis", { tipo: "analizar", modelos: [$("#a-modelo").value] });
+  setTimeout(refrescarAnalisis, 800);
+}));
+$("#b-comparar").addEventListener("click", () => accion(async () => {
+  await api("POST", "/api/analisis", { tipo: "comparar", modelos: [$("#c-a").value, $("#c-b").value] });
+  setTimeout(refrescarAnalisis, 800);
 }));
 
 refrescarModelos();

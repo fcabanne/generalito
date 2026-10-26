@@ -116,3 +116,26 @@ def test_entrenamiento_con_varios_procesos(tmp_path):
     datos = leer_registro(carpeta / "registro")
     assert len(set(datos["partida"].tolist())) >= 3  # registró partidas de varios trabajadores
     assert np.allclose(datos["valores"].sum(axis=1), 1, atol=1e-4)  # probabilidades
+
+
+def test_analisis_y_comparacion(tmp_path):
+    from generalito.analisis import main as analisis
+
+    a, b = tmp_path / "a.pt", tmp_path / "b.pt"
+    guardar_snapshot(Red(16), a, {})
+    guardar_snapshot(Red(16), b, {})
+
+    comunes = ["--partidas", "20", "--max-cpu", "100"]
+    analisis(["analizar", "--modelo", str(a), "--carpeta", str(tmp_path / "x"), *comunes])
+    r = json.loads((tmp_path / "x" / "estado.json").read_text())["resultado"]
+    assert r["partidas"] == 20 and len(r["puntos"]) == 13 and len(r["puntos"][0]) == 4
+    assert sum(r["tiro_al_anotar"]) == 20 * 52  # una anotación por turno
+    # Cada casilla se llena una vez por partida: tachada + con puntaje = 100%
+    assert all(0 <= v <= 100 for fila in r["tachada_pct"] for v in fila)
+    assert all(1 <= v <= 52 for fila in r["turno_medio"] for v in fila)
+
+    modelos = ["--modelo", str(a), "--modelo", str(b), "--nombre", "A", "--nombre", "B"]
+    analisis(["comparar", *modelos, "--carpeta", str(tmp_path / "y"), *comunes])
+    r = json.loads((tmp_path / "y" / "estado.json").read_text())["resultado"]
+    assert sum(r["victorias"]) == 20 and r["nombres"] == ["A", "B"]
+    assert r["decisiones_distintas"] > 0  # dos redes al azar deciden distinto

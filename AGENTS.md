@@ -19,9 +19,10 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
   - motor (reglas 1.0) con tests, registro, controles de recursos;
   - interfaz en el navegador (Entrenar, Jugar, Simulaciones);
   - agente PPO (`generalito/agente/`), con examen periódico contra jugadores de referencia (azar y codicioso);
-  - modelos con nombre desde la interfaz (`modelos/`).
+  - modelos con nombre desde la interfaz (`modelos/`);
+  - pestaña Análisis: qué aprendió un modelo (mapas de calor y estadísticas) y comparación de dos modelos.
 - **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
-- **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos.
+- **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos. Para el análisis prefiere datos (gráficos, estadísticas, mapas de calor), no textos generados ni nada que use APIs de AI.
 
 ## Reglas de trabajo
 
@@ -84,6 +85,7 @@ generalito/
   mostrar.py            comando generalito-mostrar (una partida para revisar)
   historial.py          partida que anota cada turno (lo usan mostrar y la interfaz)
   evaluar.py            jugadores de referencia (azar, codicioso) y examen con dados reservados
+  analisis.py           estadísticas de un modelo y comparación de dos (solo para mirar)
   agente/
     codificacion.py     estado → vector (versión 1)
     red.py              red PPO, snapshots, probabilidades y elegir

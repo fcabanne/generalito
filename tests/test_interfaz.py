@@ -115,6 +115,22 @@ def test_modelos_con_nombre(tmp_path):
         assert s["modelo"] == "modelo-v1" and s["opciones"]
         _, p = pedir(url, f"/api/partidas/{p['id']}/modelo", {"hasta": "fin"})
         assert p["terminada"]
+
+        codigo, r = pedir(
+            url, "/api/analisis", {"tipo": "comparar", "modelos": ["ultimo", "ultimo"]}
+        )
+        assert codigo == 400
+        pedido = {"tipo": "analizar", "modelos": ["modelo-v1"], "partidas": 20}
+        codigo, r = pedir(url, "/api/analisis", pedido)
+        assert codigo == 200
+        for _ in range(300):
+            _, lista = pedir(url, "/api/corridas")
+            c = next(x for x in lista if x["nombre"] == r["nombre"])
+            if c["situacion"] == "terminada":
+                break
+            time.sleep(0.2)
+        assert c["config"]["programa"] == "analizar"
+        assert c["estado"]["resultado"]["partidas"] == 20
     finally:
         servidor.shutdown()
         servidor.server_close()

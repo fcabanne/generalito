@@ -14,6 +14,23 @@ Formato:
 
 ---
 
+## 2026-10-26 · Análisis de estrategias y comparación de modelos
+
+**Contexto:** Facu quiere ver qué estrategias aprendió el modelo. Prefiere gráficos y estadísticas basadas en datos, sin textos generados ni AI.
+
+**Decisión:**
+
+- `generalito/analisis.py` hace jugar al modelo 2.000 partidas con dados reservados (una semilla distinta a la del examen del entrenamiento), sin azar, y cuenta cada decisión.
+- **Analizar:** por cada casilla, los puntos promedio, el % de veces tachada y el turno promedio en que se llena (mapa de calor). También en qué tiro anota, cuántos dados guarda al volver a tirar, el promedio por columna, el % de partidas que llega al Bonus y la distribución de puntajes.
+- **Comparar:** los dos modelos juegan las mismas partidas. Se muestran las victorias, los empates, los promedios y cuántas veces por partida decidirían distinto. Se cuenta desde las situaciones del primer modelo, preguntándole al segundo qué haría.
+- Corre como subproceso, con los mismos límites que el resto: la página lee `estado.json`, y corre uno a la vez.
+
+**Alternativas descartadas:** frases automáticas y laboratorio de situaciones. Facu no los quiere por ahora.
+
+**Consecuencias:** nada de esto toca el entrenamiento: es solo para mirar.
+
+---
+
 ## 2026-10-26 · Modelos con nombre
 
 **Contexto:** Facu quiere guardar versiones del modelo ("modelo-v1") y poder volver a ellas.
