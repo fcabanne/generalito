@@ -14,6 +14,19 @@ Formato:
 
 ---
 
+## 2026-10-27 · Horizonte (lambda-gae) configurable desde la interfaz
+
+**Contexto:** el modelo casi nunca llega al Bonus (entre 0.1% y 1.2% de las partidas). Facu sospecha un problema de asignación de crédito: con λ = 0.95 el agente reparte el mérito sobre unos 20 pasos (unos 7 turnos), y el Bonus se arma a lo largo de muchos más.
+
+**Decisión:**
+
+- La pestaña Entrenar suma el campo "Horizonte (lambda-gae)", con 0.95 por defecto y valores entre 0.5 y 1. Se pasa como `--lambda-gae` y se muestra en la tarjeta de cada entrenamiento, junto a los núcleos.
+- No es sesgo humano: λ no dice nada de cómo jugar. Solo cambia cuánto se apoya el aprendizaje en la recompensa real de los pasos siguientes frente a su propia estimación (más λ: menos sesgo y más ruido).
+
+**Experimento previsto:** desde cero, λ = 0.99, 40 minutos, 12 núcleos (el mismo tiempo que acumuló modelo-v2), comparando contra v2 en promedio y en % de Bonus.
+
+---
+
 ## 2026-10-26 · Análisis de estrategias y comparación de modelos
 
 **Contexto:** Facu quiere ver qué estrategias aprendió el modelo. Prefiere gráficos y estadísticas basadas en datos, sin textos generados ni AI.

@@ -134,3 +134,24 @@ def test_modelos_con_nombre(tmp_path):
     finally:
         servidor.shutdown()
         servidor.server_close()
+
+
+def test_entrenar_con_horizonte(tmp_path):
+    pytest.importorskip("torch")
+    servidor = crear_servidor(0, tmp_path / "corridas", tmp_path / "modelos")
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{servidor.server_address[1]}"
+    try:
+        codigo, _ = pedir(url, "/api/entrenamientos", {"minutos": 1, "lambda_gae": 1.5})
+        assert codigo == 400
+        codigo, r = pedir(url, "/api/entrenamientos", {"minutos": 1, "lambda_gae": 0.99})
+        assert codigo == 200
+        config = json.loads((tmp_path / "corridas" / r["nombre"] / "config.json").read_text())
+        assert config["parametros"]["lambda_gae"] == 0.99
+        proceso = servidor.corridas.procesos[r["nombre"]]
+        assert proceso.args[proceso.args.index("--lambda-gae") + 1] == "0.99"
+        proceso.terminate()
+        proceso.wait(timeout=30)
+    finally:
+        servidor.shutdown()
+        servidor.server_close()

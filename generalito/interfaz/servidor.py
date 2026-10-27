@@ -34,6 +34,7 @@ from generalito.recursos import ARCHIVO_PARAR, Limites, temperatura_gpu
 
 PAGINA = Path(__file__).with_name("pagina.html")
 MAX_PARTIDAS_EN_MEMORIA = 50
+LAMBDA_GAE_DEFECTO = 0.95  # el mismo valor por defecto que generalito-entrenar
 
 
 # --- Partidas interactivas ---
@@ -221,12 +222,17 @@ class Corridas:
         minutos = float(pedido.get("minutos", 60))
         if not 0 < minutos <= 7 * 24 * 60:
             raise ValueError("Los minutos tienen que estar entre 1 y una semana")
+        lambda_gae = pedido.get("lambda_gae")
+        lambda_gae = LAMBDA_GAE_DEFECTO if lambda_gae in (None, "") else float(lambda_gae)
+        if not 0.5 <= lambda_gae <= 1.0:
+            raise ValueError("El horizonte (lambda-gae) tiene que estar entre 0.5 y 1")
         args = [
             "--minutos", str(minutos),
             "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
             "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
             # unos 6 exámenes por entrenamiento, entre cada 2 y cada 10 minutos
             "--evaluar-cada-min", str(max(2.0, min(10.0, minutos / 6))),
+            "--lambda-gae", str(lambda_gae),
         ]  # fmt: skip
         desde = None
         clave = pedido.get("desde", "cero")
@@ -237,6 +243,7 @@ class Corridas:
             "programa": "entrenar",
             "jugador": "agente",
             "desde": desde,
+            "parametros": {"lambda_gae": lambda_gae},
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
@@ -552,7 +559,9 @@ def crear_servidor(
             except (ValueError, KeyError, json.JSONDecodeError) as error:
                 self._error(str(error))
 
-    return ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
+    servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
+    servidor.corridas = corridas  # para los tests
+    return servidor
 
 
 def main(argv: list[str] | None = None) -> int:

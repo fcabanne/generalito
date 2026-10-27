@@ -195,6 +195,7 @@
       <div class="formulario">
         <label>Minutos<input id="e-minutos" type="number" value="60" min="1"><span>Frena solo al llegar a este tiempo.</span></label>
         <label>Núcleos de CPU<input id="e-hilos" type="number" value="2" min="1"><span>Cuántos puede usar.</span></label>
+        <label>Horizonte (lambda-gae)<input id="e-lambda" type="number" value="0.95" min="0.5" max="1" step="0.01"><span>Cuántas jugadas hacia adelante tiene en cuenta al repartir el mérito. 0.95 ≈ 20 jugadas; 0.99 ≈ 100.</span></label>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
@@ -748,6 +749,8 @@ async function refrescarEntrenamientos() {
         <div>Partidas jugadas<b>${(e.partidas_totales ?? 0).toLocaleString("es-AR")}</b></div>
         <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
         <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
+        <div>Horizonte<b>${(c.config.parametros && c.config.parametros.lambda_gae) ?? 0.95}</b>lambda-gae</div>
+        <div>Núcleos<b>${(c.config.parametros && c.config.parametros.hilos) ?? "–"}</b></div>
       </div>
       ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}.</p>` : ""}
       ${e.motivo ? `<p class="gris chico">Por qué terminó: ${e.motivo}.</p>` : ""}
@@ -768,6 +771,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     minutos: +$("#e-minutos").value,
     hilos: +$("#e-hilos").value,
     desde: $("#e-desde").value,
+    lambda_gae: $("#e-lambda").value,
   });
   setTimeout(refrescarEntrenamientos, 800);
 }));
