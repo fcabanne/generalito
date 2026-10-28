@@ -133,6 +133,10 @@ def test_analisis_y_comparacion(tmp_path):
     # Cada casilla se llena una vez por partida: tachada + con puntaje = 100%
     assert all(0 <= v <= 100 for fila in r["tachada_pct"] for v in fila)
     assert all(1 <= v <= 52 for fila in r["turno_medio"] for v in fila)
+    # Las tachadas por tiro suman lo mismo que el % tachada
+    for k in range(13):
+        for c in range(4):
+            assert sum(r["tachada_por_tiro"][k][c]) == round(r["tachada_pct"][k][c] * 20 / 100)
 
     modelos = ["--modelo", str(a), "--modelo", str(b), "--nombre", "A", "--nombre", "B"]
     analisis(["comparar", *modelos, "--carpeta", str(tmp_path / "y"), *comunes])

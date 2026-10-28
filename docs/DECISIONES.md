@@ -14,6 +14,15 @@ Formato:
 
 ---
 
+## 2026-10-28 · Exploración (entropía) configurable y tachadas por tiro
+
+**Decisión:**
+
+- La pestaña Entrenar suma el campo "Exploración (entropía)", con 0.01 por defecto y valores entre 0 y 0.2. Se pasa como `--entropia` y se muestra en la tarjeta de cada entrenamiento. Igual que λ, no dice nada de cómo jugar: solo cuánto se premia que la política no se cierre en una sola jugada.
+- El análisis cuenta en qué tiro (1, 2 o 3) se tachó cada casilla (`tachada_por_tiro`) y la pestaña Análisis lo muestra como una barra apilada por casilla. Los análisis viejos no tienen este dato y la sección no aparece.
+
+---
+
 ## 2026-10-27 · Horizonte (lambda-gae) configurable desde la interfaz
 
 **Contexto:** el modelo casi nunca llega al Bonus (entre 0.1% y 1.2% de las partidas). Facu sospecha un problema de asignación de crédito: con λ = 0.95 el agente reparte el mérito sobre unos 20 pasos (unos 7 turnos), y el Bonus se arma a lo largo de muchos más.

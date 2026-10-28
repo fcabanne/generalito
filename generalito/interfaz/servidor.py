@@ -34,7 +34,8 @@ from generalito.recursos import ARCHIVO_PARAR, Limites, temperatura_gpu
 
 PAGINA = Path(__file__).with_name("pagina.html")
 MAX_PARTIDAS_EN_MEMORIA = 50
-LAMBDA_GAE_DEFECTO = 0.95  # el mismo valor por defecto que generalito-entrenar
+LAMBDA_GAE_DEFECTO = 0.95  # los mismos valores por defecto que generalito-entrenar
+ENTROPIA_DEFECTO = 0.01
 
 
 # --- Partidas interactivas ---
@@ -226,6 +227,10 @@ class Corridas:
         lambda_gae = LAMBDA_GAE_DEFECTO if lambda_gae in (None, "") else float(lambda_gae)
         if not 0.5 <= lambda_gae <= 1.0:
             raise ValueError("El horizonte (lambda-gae) tiene que estar entre 0.5 y 1")
+        entropia = pedido.get("entropia")
+        entropia = ENTROPIA_DEFECTO if entropia in (None, "") else float(entropia)
+        if not 0.0 <= entropia <= 0.2:
+            raise ValueError("La exploración (entropía) tiene que estar entre 0 y 0.2")
         args = [
             "--minutos", str(minutos),
             "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
@@ -233,6 +238,7 @@ class Corridas:
             # unos 6 exámenes por entrenamiento, entre cada 2 y cada 10 minutos
             "--evaluar-cada-min", str(max(2.0, min(10.0, minutos / 6))),
             "--lambda-gae", str(lambda_gae),
+            "--entropia", str(entropia),
         ]  # fmt: skip
         desde = None
         clave = pedido.get("desde", "cero")
@@ -243,7 +249,7 @@ class Corridas:
             "programa": "entrenar",
             "jugador": "agente",
             "desde": desde,
-            "parametros": {"lambda_gae": lambda_gae},
+            "parametros": {"lambda_gae": lambda_gae, "entropia": entropia},
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")

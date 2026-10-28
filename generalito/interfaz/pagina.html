@@ -161,6 +161,8 @@
   .calor td { border: 2px solid var(--superficie); padding: 6px 8px; text-align: center; border-radius: 6px; font-variant-numeric: tabular-nums; }
   .calor th { padding: 4px 8px; font-size: 13px; }
   .calor td:first-child { text-align: left; background: none; white-space: nowrap; }
+  .calor.tiros td { background: var(--fondo); padding: 6px; }
+  .calor.tiros td:first-child { background: none; }
   .modos { display: inline-flex; gap: 4px; background: var(--fondo); padding: 3px; border-radius: 8px; border: 1px solid var(--borde); }
   .modos button { border: 0; background: none; color: var(--texto-2); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
   .modos button.activo { background: var(--superficie); color: var(--texto); font-weight: 600; }
@@ -196,6 +198,7 @@
         <label>Minutos<input id="e-minutos" type="number" value="60" min="1"><span>Frena solo al llegar a este tiempo.</span></label>
         <label>Núcleos de CPU<input id="e-hilos" type="number" value="2" min="1"><span>Cuántos puede usar.</span></label>
         <label>Horizonte (lambda-gae)<input id="e-lambda" type="number" value="0.95" min="0.5" max="1" step="0.01"><span>Cuántas jugadas hacia adelante tiene en cuenta al repartir el mérito. 0.95 ≈ 20 jugadas; 0.99 ≈ 100.</span></label>
+        <label>Exploración (entropía)<input id="e-entropia" type="number" value="0.01" min="0" max="0.2" step="0.005"><span>Cuánto se anima a probar jugadas distintas a su favorita. 0 = nada; más alto = prueba más.</span></label>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
@@ -750,6 +753,7 @@ async function refrescarEntrenamientos() {
         <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
         <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
         <div>Horizonte<b>${(c.config.parametros && c.config.parametros.lambda_gae) ?? 0.95}</b>lambda-gae</div>
+        <div>Exploración<b>${(c.config.parametros && c.config.parametros.entropia) ?? 0.01}</b>entropía</div>
         <div>Núcleos<b>${(c.config.parametros && c.config.parametros.hilos) ?? "–"}</b></div>
       </div>
       ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}.</p>` : ""}
@@ -772,6 +776,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     hilos: +$("#e-hilos").value,
     desde: $("#e-desde").value,
     lambda_gae: $("#e-lambda").value,
+    entropia: $("#e-entropia").value,
   });
   setTimeout(refrescarEntrenamientos, 800);
 }));
@@ -848,6 +853,32 @@ function mapaDeCalor(r, id) {
   return html;
 }
 
+const TONOS_TIRO = [35, 65, 100]; // tiro 1, 2 y 3: del más claro al más oscuro
+
+function tachadasPorTiro(r) {
+  const color = (i) => `color-mix(in oklab, var(--serie-1) ${TONOS_TIRO[i]}%, var(--superficie))`;
+  let html = `<h3 style="margin:18px 0 6px">En qué tiro tacha cada casilla</h3>
+    <p class="gris chico" style="margin:0 0 6px">Cada barra reparte las veces que tachó esa casilla según el tiro. Pasá el mouse para ver los números.</p>
+    <div class="scroll"><table class="calor tiros"><tr><th></th>${r.columnas_nombres.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+  r.categorias.forEach((cat, k) => {
+    html += `<tr><td>${cat}</td>`;
+    for (let c = 0; c < 4; c++) {
+      const t = r.tachada_por_tiro[k][c], total = t[0] + t[1] + t[2];
+      if (!total) { html += `<td class="gris">–</td>`; continue; }
+      const pct = t.map((x) => Math.round((100 * x) / total));
+      const tip = `${cat} en ${r.columnas_nombres[c]}: tachada ${total} veces · tiro 1: ${pct[0]}% (${t[0]}) · tiro 2: ${pct[1]}% (${t[1]}) · tiro 3: ${pct[2]}% (${t[2]})`;
+      html += `<td title="${tip}"><div class="apilada" style="height:16px;margin:0">` +
+        t.map((x, i) => (x ? `<div style="flex:${x};background:${color(i)}"></div>` : "")).join("") +
+        `</div><div class="chico gris" style="font-size:11px;margin-top:2px">${pct[0]} · ${pct[1]} · ${pct[2]} % · ${total} veces</div></td>`;
+    }
+    html += "</tr>";
+  });
+  html += `</table></div><div class="fila chico gris" style="gap:16px;margin-top:6px">` +
+    ["Tiro 1", "Tiro 2", "Tiro 3"].map((n, i) => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(i)}"></span> ${n}</span>`).join("") +
+    `<span>· debajo de cada barra: % en tiro 1 · 2 · 3, y cuántas veces la tachó</span></div>`;
+  return html;
+}
+
 function barras(titulo, etiquetas, valores) {
   const total = valores.reduce((a, b) => a + b, 0) || 1;
   const max = Math.max(...valores, 1);
@@ -871,6 +902,7 @@ function tarjetaAnalisis(c) {
       <div>Mejor partida<b>${r.maximo}</b></div><div>Peor partida<b>${r.minimo}</b></div>
       <div>Anota puntos en Servida<b>${r.servida_con_puntaje_pct}%</b>de sus casillas</div></div>`;
     html += mapaDeCalor(r, c.nombre);
+    if (r.tachada_por_tiro) html += tachadasPorTiro(r);
     html += `<div class="dos-col"><div>` +
       barras("En qué tiro anota", ["Tiro 1", "Tiro 2", "Tiro 3"], r.tiro_al_anotar) +
       barras("Cuántos dados guarda al volver a tirar", ["Ninguno (tira los 5)", "1", "2", "3", "4"], r.dados_guardados) +

@@ -151,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             n = len(juegos)
             suma = np.zeros(52)
             tachadas = np.zeros(52)
+            tachadas_por_tiro = np.zeros((52, 3), dtype=int)
             turno_suma = np.zeros(52)
             tiro_al_anotar = Counter()
             guardados = Counter()
@@ -161,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
                     c = accion.columna * 13 + accion.categoria
                     suma[c] += valor
                     tachadas[c] += valor == 0
+                    if valor == 0:
+                        tachadas_por_tiro[c, tiro - 1] += 1
                     turno_suma[c] += turno
                     tiro_al_anotar[tiro] += 1
                     servida_con_puntaje += accion.columna == Columna.SERVIDA and valor > 0
@@ -194,6 +197,10 @@ def main(argv: list[str] | None = None) -> int:
                 ],
                 "turno_medio": [
                     [round(turno_suma[c * 13 + k] / n, 1) for c in range(4)] for k in range(13)
+                ],
+                # cuántas veces se tachó cada casilla en el tiro 1, 2 y 3
+                "tachada_por_tiro": [
+                    [tachadas_por_tiro[c * 13 + k].tolist() for c in range(4)] for k in range(13)
                 ],
                 "columnas": columnas,
                 "tiro_al_anotar": [tiro_al_anotar[t] for t in (1, 2, 3)],

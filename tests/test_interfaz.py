@@ -144,12 +144,17 @@ def test_entrenar_con_horizonte(tmp_path):
     try:
         codigo, _ = pedir(url, "/api/entrenamientos", {"minutos": 1, "lambda_gae": 1.5})
         assert codigo == 400
-        codigo, r = pedir(url, "/api/entrenamientos", {"minutos": 1, "lambda_gae": 0.99})
+        codigo, _ = pedir(url, "/api/entrenamientos", {"minutos": 1, "entropia": 0.5})
+        assert codigo == 400
+        pedido = {"minutos": 1, "lambda_gae": 0.99, "entropia": 0.02}
+        codigo, r = pedir(url, "/api/entrenamientos", pedido)
         assert codigo == 200
         config = json.loads((tmp_path / "corridas" / r["nombre"] / "config.json").read_text())
         assert config["parametros"]["lambda_gae"] == 0.99
         proceso = servidor.corridas.procesos[r["nombre"]]
         assert proceso.args[proceso.args.index("--lambda-gae") + 1] == "0.99"
+        assert proceso.args[proceso.args.index("--entropia") + 1] == "0.02"
+        assert config["parametros"]["entropia"] == 0.02
         proceso.terminate()
         proceso.wait(timeout=30)
     finally:
