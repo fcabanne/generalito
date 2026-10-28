@@ -14,6 +14,29 @@ Formato:
 
 ---
 
+## 2026-10-28 · Excepción controlada a "sin reward shaping": Pista del Bonus
+
+**Contexto:** los modelos casi nunca llegan al Bonus (entre 0.1% y 1.2% de las partidas), y ahí pierden hasta 120 puntos por partida. Facu decide hacer una excepción acotada a la regla "sin *reward shaping*" (decisión del 2026-10-10), solo para el Bonus.
+
+**Decisión:**
+
+- **Qué:** *shaping* basado en potencial (Ng, Harada y Russell, 1999). El potencial es Φ(estado) = Σ por columna de 30 × min(suma de números / 60, 1). En cada paso la recompensa suma peso × (Φ(después) − Φ(antes)). En el estado final Φ = 0, así que todo lo adelantado se descuenta en la última jugada. Sumado en una partida da exactamente 0 y el puntaje final no cambia. Con γ = 1, la política óptima es la misma que sin pista.
+- **Peso fijo por partida:** cada partida toma el peso vigente al empezar y lo mantiene hasta terminar. Si el peso cambiara a mitad de partida, la suma dejaría de ser exactamente 0.
+- **Rueditas:** el peso arranca en un valor configurable (por defecto 0.5) y baja linealmente a 0 en un porcentaje configurable del entrenamiento (por defecto 50%), medido por el límite que se alcance primero (minutos o partidas). Después, recompensa pura.
+- **Interfaz:** en Entrenar, "Pista del Bonus" apagada por defecto, con peso inicial y porcentaje en que se apaga. Se muestra en la tarjeta del entrenamiento con el peso actual. Línea de comandos: `--pista-bonus` (0 = apagada) y `--pista-fin`.
+- **Trazabilidad:** el snapshot guarda `entrenamiento.pista` (la de ese entrenamiento) y `pistas` (todas las del linaje, incluidas las de los modelos de los que siguió). Lo mismo queda en el `.json` de los modelos con nombre y en la tabla "Mis modelos".
+- **Tests:** la pista suma 0 en partidas completas, y con la pista activa las recompensas que recibe el agente suman exactamente el puntaje final.
+
+**Alternativas descartadas:**
+
+- Variables de estado como "cuánto falta para 60": cambian lo que ve el modelo para siempre, no solo mientras aprende.
+- Premio fijo al llegar al Bonus: cambia el objetivo y el puntaje final que se optimiza.
+- Pista permanente: queda como empujón temporal; el modelo final se termina de entrenar con recompensa pura.
+
+**Consecuencias:** la regla 7 de `AGENTS.md` y la sección "Sin sesgo humano" del PRD nombran esta única excepción. Cualquier otra pista requiere una decisión nueva. Para comparar con y sin pista hay que mirar el examen y el % de Bonus en Análisis, no la curva de entrenamiento: con la pista activa, esa curva sigue mostrando el puntaje real de las partidas (no incluye la pista), así que es comparable.
+
+---
+
 ## 2026-10-28 · Exploración (entropía) configurable y tachadas por tiro
 
 **Decisión:**

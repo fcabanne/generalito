@@ -53,6 +53,19 @@ def _argumentos(argv):
     p.add_argument("--recorte", type=float, default=0.2)
     p.add_argument("--entropia", type=float, default=0.01)
     p.add_argument("--oculta", type=int, default=256)
+    # Pista del Bonus: excepción controlada a "sin reward shaping" (ver pista.py)
+    p.add_argument(
+        "--pista-bonus",
+        type=float,
+        default=0.0,
+        help="peso inicial de la pista del Bonus (0 = apagada)",
+    )
+    p.add_argument(
+        "--pista-fin",
+        type=float,
+        default=50,
+        help="porcentaje del entrenamiento en que la pista llega a 0",
+    )
     g = p.add_argument_group("límites de recursos")
     g.add_argument("--hilos", type=int, default=d.hilos_cpu, help="núcleos que puede usar")
     g.add_argument("--max-cpu", type=float, default=d.max_cpu_sistema)
@@ -80,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from generalito.agente.codificacion import TAMANO_ESTADO, VERSION_CODIFICACION
     from generalito.agente.entornos import Entornos
+    from generalito.agente.pista import peso_actual
     from generalito.agente.red import Red, cargar_snapshot, guardar_snapshot
     from generalito.evaluar import evaluar_agente, evaluar_jugador
     from generalito.motor import CANTIDAD_JUGADAS, VERSION_REGLAS
@@ -106,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- Red ---
     partidas_previas = 0
+    metricas_previas: dict = {}
     if args.desde:
         red, metricas_previas = cargar_snapshot(args.desde)
         partidas_previas = metricas_previas.get("partidas_entrenadas", 0)
@@ -125,6 +140,25 @@ def main(argv: list[str] | None = None) -> int:
         for nombre in ("azar", "codicioso")
     }
 
+    # --- Pista del Bonus ---
+    pista = None
+    if args.pista_bonus > 0:
+        pista = {"peso_inicial": args.pista_bonus, "fin_pct": args.pista_fin}
+
+    def progreso() -> float:
+        """Fracción del entrenamiento hecha (0 a 1), según el límite que se alcance primero."""
+        partes = [0.0]
+        if limites.max_minutos:
+            partes.append(guardian.minutos() / limites.max_minutos)
+        if limites.max_partidas:
+            partes.append(partidas_terminadas / limites.max_partidas)
+        return min(1.0, max(partes))
+
+    def peso_pista() -> float:
+        if pista is None:
+            return 0.0
+        return peso_actual(pista["peso_inicial"], pista["fin_pct"] / 100, progreso())
+
     # --- Entornos ---
     n, t_max = args.entornos, args.pasos
     registrar = args.registrar_cada > 0
@@ -136,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         registrar_cada=max(1, args.registrar_cada),
         max_mb=limites.max_disco_mb,
         min_libre_gb=limites.min_disco_libre_gb,
+        peso_pista=pista["peso_inicial"] if pista else 0.0,
     )
 
     estados = np.zeros((t_max + 1, n, TAMANO_ESTADO), dtype=np.float32)
@@ -148,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
 
     totales_recientes: deque[int] = deque(maxlen=1000)
     partidas_terminadas = 0
+    # Historial de pistas de todo el linaje del modelo (incluye las de entrenamientos previos)
+    pistas = list(metricas_previas.get("pistas", [])) + ([pista] if pista else [])
     curva: list[dict] = []
     evaluaciones: list[dict] = []
     mejor_eval = -1.0
@@ -161,6 +198,12 @@ def main(argv: list[str] | None = None) -> int:
             "minutos": round(guardian.minutos(), 2),
             "evaluaciones": evaluaciones,
             "referencias": referencias,
+            "entrenamiento": {
+                "lambda_gae": args.lambda_gae,
+                "entropia": args.entropia,
+                "pista": pista,
+            },
+            "pistas": pistas,
         }
 
     def escribir_estado(final: bool) -> None:
@@ -181,6 +224,9 @@ def main(argv: list[str] | None = None) -> int:
             "terminado": final,
             "motivo": motivo,
             "pausa": None if final else guardian.pausa,
+            "pista": None if pista is None else {**pista, "peso_actual": round(peso_pista(), 4)},
+            "pistas": pistas,
+            "entrenamiento": {"lambda_gae": args.lambda_gae, "entropia": args.entropia},
             "recursos": guardian.medir() if final else guardian.ultima_medicion or guardian.medir(),
         }
         (carpeta / "estado.json").write_text(json.dumps(estado), encoding="utf-8")
@@ -213,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         while motivo is None:
             # --- Jugar una tanda ---
             red.eval()
+            peso = peso_pista()  # para las partidas que empiecen en esta tanda
             with torch.no_grad():
                 for t in range(t_max):
                     logits, v = red(torch.from_numpy(estados[t]), torch.from_numpy(mascaras[t]))
@@ -228,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                         recompensas[t],
                         terminadas[t],
                         totales,
-                    ) = entornos.paso(acciones[t], probs)
+                    ) = entornos.paso(acciones[t], probs, peso)
                     totales_recientes.extend(totales)
                     partidas_terminadas += len(totales)
                 _, v = red(torch.from_numpy(estados[t_max]), torch.from_numpy(mascaras[t_max]))
@@ -283,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
                         "partidas": partidas_previas + partidas_terminadas,
                         "minutos": round(guardian.minutos(), 2),
                         "promedio": round(statistics.fmean(totales_recientes), 1),
+                        **({"peso_pista": round(peso, 4)} if pista else {}),
                     }
                 )
                 if len(curva) > MAX_PUNTOS_CURVA:

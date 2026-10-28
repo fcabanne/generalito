@@ -231,6 +231,15 @@ class Corridas:
         entropia = ENTROPIA_DEFECTO if entropia in (None, "") else float(entropia)
         if not 0.0 <= entropia <= 0.2:
             raise ValueError("La exploración (entropía) tiene que estar entre 0 y 0.2")
+        pista = pedido.get("pista") or {}
+        pista_bonus, pista_fin = 0.0, 50.0
+        if pista.get("activa"):
+            pista_bonus = float(pista.get("peso", 0.5))
+            pista_fin = float(pista.get("fin_pct", 50))
+            if not 0 < pista_bonus <= 2:
+                raise ValueError("El peso inicial de la pista tiene que estar entre 0 y 2")
+            if not 0 < pista_fin <= 100:
+                raise ValueError("El porcentaje en que se apaga la pista va de 1 a 100")
         args = [
             "--minutos", str(minutos),
             "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
@@ -239,6 +248,8 @@ class Corridas:
             "--evaluar-cada-min", str(max(2.0, min(10.0, minutos / 6))),
             "--lambda-gae", str(lambda_gae),
             "--entropia", str(entropia),
+            "--pista-bonus", str(pista_bonus),
+            "--pista-fin", str(pista_fin),
         ]  # fmt: skip
         desde = None
         clave = pedido.get("desde", "cero")
@@ -249,7 +260,12 @@ class Corridas:
             "programa": "entrenar",
             "jugador": "agente",
             "desde": desde,
-            "parametros": {"lambda_gae": lambda_gae, "entropia": entropia},
+            "parametros": {
+                "lambda_gae": lambda_gae,
+                "entropia": entropia,
+                "pista_bonus": pista_bonus,
+                "pista_fin": pista_fin,
+            },
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
@@ -376,12 +392,23 @@ class Catalogo:
             raise ValueError("Todavía no hay ningún modelo entrenado para guardar.")
         self.carpeta.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ultimo["ruta"], self.carpeta / f"{nombre}.pt")
+        corrida = self.corridas.carpeta / ultimo["corrida"]
+        estado = _leer_json(corrida / "estado.json") or {}
         meta = {
             "nombre": nombre,
             "promedio": ultimo["promedio"],
             "partidas": ultimo["partidas"],
             "fecha": datetime.now().isoformat(timespec="seconds"),
             "origen": ultimo["corrida"],
+            # cómo se entrenó (el último entrenamiento) y las pistas de todo su linaje
+            "entrenamiento": {
+                **estado.get("entrenamiento", {}),
+                "pista": {
+                    k: v for k, v in (estado.get("pista") or {}).items() if k != "peso_actual"
+                }
+                or None,
+            },
+            "pistas": estado.get("pistas", []),
         }
         (self.carpeta / f"{nombre}.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         return meta

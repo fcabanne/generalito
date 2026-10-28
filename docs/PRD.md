@@ -70,7 +70,8 @@ No se le enseña a jugar: se le dan las reglas y una recompensa, y descubre la e
 
 La idea es que el modelo descubra sus propias estrategias, así que no se le transmite ningún conocimiento de cómo juega la familia:
 
-- **Recompensa:** solo el resultado (puntaje final en la v1, ganar o perder en la v2). No hay premios intermedios (*reward shaping*), como puntos por acercarse al Bonus o por no tachar ciertas casillas.
+- **Recompensa:** solo el resultado (puntaje final en la v1, ganar o perder en la v2). No hay premios intermedios (*reward shaping*), como puntos por no tachar ciertas casillas.
+  - **Única excepción, controlada: la "Pista del Bonus".** El modelo casi nunca llegaba al Bonus (0.1–1.2% de las partidas). La pista adelanta el valor de acercarse a 60 en los números de cada columna y lo descuenta entero al final de la partida, así que el puntaje que optimiza no cambia (*shaping* basado en potencial). Es opcional (apagada por defecto), su peso baja a 0 a mitad del entrenamiento (configurable) y después la recompensa vuelve a ser pura. Cada modelo guarda si se entrenó con ella. Detalle en `DECISIONES.md` (2026-10-28).
 - **Estado crudo:** dados, número de tiro, si el último tiro fue servido y la planilla. No hay variables armadas a mano que sugieran una estrategia.
 - **Sin imitación:** no aprende de partidas humanas ni de heurísticas escritas por personas.
 - **Baselines y metas:** sirven solo para medir. Nunca se usan para entrenar.

@@ -33,10 +33,12 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
 5. **Registrar decisiones.** Toda decisión de diseño no trivial (codificación del estado, algoritmo de RL, formato de snapshots, etc.) va a `docs/DECISIONES.md` con su porqué.
 6. **Mantener este archivo al día.** Si cambia el estado, la estructura o una convención, actualizar `AGENTS.md` en el mismo commit.
 7. **No sesgar al modelo.** No meter conocimiento humano de cómo jugar en nada que use el entrenamiento:
-   - sin *reward shaping*;
+   - sin *reward shaping*, salvo la única excepción de abajo;
    - sin variables de estado armadas a mano que sugieran estrategias;
    - sin imitar partidas ni heurísticas humanas;
    - sin comentarios de estrategia en `docs/REGLAS.md`.
+
+   **Excepción controlada: la "Pista del Bonus"** (`generalito/agente/pista.py`, DECISIONES 2026-10-28). Es *shaping* basado en potencial: Φ = Σ por columna de 30 × min(suma de números / 60, 1), y cada paso suma peso × (Φ después − Φ antes), con Φ = 0 en el estado final. Sumado en una partida da 0, así que el puntaje final no cambia. Está apagada por defecto; cuando se usa, el peso baja linealmente a 0 en un porcentaje del entrenamiento y después la recompensa es pura. Queda registrada en el modelo (`pistas`). No agregar otra pista ni cambiar esta sin una decisión nueva de Facu en `docs/DECISIONES.md`.
 
    Los baselines y las metas (por ejemplo, la familia suele hacer entre 950 y 1050 puntos) solo sirven para evaluar. Ver "Sin sesgo humano" en el PRD.
 8. **Cuidar el equipo de Facu.** Todo programa que corra muchas partidas o entrene sigue el esqueleto de `generalito/simular.py`:
@@ -90,6 +92,8 @@ generalito/
     codificacion.py     estado → vector (versión 1)
     red.py              red PPO, snapshots, probabilidades y elegir
     entrenar.py         comando generalito-entrenar (PPO)
+    entornos.py         partidas en paralelo (varios procesos) y recompensa por paso
+    pista.py            Pista del Bonus (única excepción de shaping, apagada por defecto)
   interfaz/             interfaz local en el navegador (comando generalito)
     servidor.py         servidor HTTP de la biblioteca estándar, solo en 127.0.0.1
     pagina.html         la página: HTML + JS sin librerías ni internet

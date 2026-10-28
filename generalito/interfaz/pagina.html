@@ -134,6 +134,8 @@
     font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde);
     background: var(--fondo); color: var(--texto);
   }
+  .pista-campo { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 14px; }
+  .pista-campo .chico { font-weight: 400; }
   .formulario input {
     font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde);
     background: var(--fondo); color: var(--texto);
@@ -199,6 +201,16 @@
         <label>Núcleos de CPU<input id="e-hilos" type="number" value="2" min="1"><span>Cuántos puede usar.</span></label>
         <label>Horizonte (lambda-gae)<input id="e-lambda" type="number" value="0.95" min="0.5" max="1" step="0.01"><span>Cuántas jugadas hacia adelante tiene en cuenta al repartir el mérito. 0.95 ≈ 20 jugadas; 0.99 ≈ 100.</span></label>
         <label>Exploración (entropía)<input id="e-entropia" type="number" value="0.01" min="0" max="0.2" step="0.005"><span>Cuánto se anima a probar jugadas distintas a su favorita. 0 = nada; más alto = prueba más.</span></label>
+        <div class="pista-campo">
+          <label style="flex-direction:row;align-items:center;gap:6px"><input id="e-pista" type="checkbox"> Pista del Bonus</label>
+          <div class="fila" style="gap:6px;margin-top:4px">
+            <input id="e-pista-peso" class="campo" type="number" value="0.5" min="0.05" max="2" step="0.05" style="width:80px" disabled title="Peso inicial">
+            <span class="chico gris">se apaga al</span>
+            <input id="e-pista-fin" class="campo" type="number" value="50" min="1" max="100" step="5" style="width:70px" disabled title="Porcentaje del entrenamiento">
+            <span class="chico gris">%</span>
+          </div>
+          <span class="chico gris">Excepción controlada: adelanta el valor de acercarse a 60 en los números y lo descuenta al final (no cambia el puntaje). Peso inicial, que baja a 0 en ese % del entrenamiento.</span>
+        </div>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
@@ -754,6 +766,7 @@ async function refrescarEntrenamientos() {
         <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
         <div>Horizonte<b>${(c.config.parametros && c.config.parametros.lambda_gae) ?? 0.95}</b>lambda-gae</div>
         <div>Exploración<b>${(c.config.parametros && c.config.parametros.entropia) ?? 0.01}</b>entropía</div>
+        ${textoPista(c.config.parametros, e.pista)}
         <div>Núcleos<b>${(c.config.parametros && c.config.parametros.hilos) ?? "–"}</b></div>
       </div>
       ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}.</p>` : ""}
@@ -777,9 +790,17 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     desde: $("#e-desde").value,
     lambda_gae: $("#e-lambda").value,
     entropia: $("#e-entropia").value,
+    pista: { activa: $("#e-pista").checked, peso: $("#e-pista-peso").value, fin_pct: $("#e-pista-fin").value },
   });
   setTimeout(refrescarEntrenamientos, 800);
 }));
+
+function textoPista(par, pistaEstado) {
+  const peso = par && par.pista_bonus;
+  if (!peso) return `<div>Pista del Bonus<b>apagada</b></div>`;
+  const ahora = pistaEstado && pistaEstado.peso_actual != null ? ` · ahora ${pistaEstado.peso_actual}` : "";
+  return `<div>Pista del Bonus<b>${peso} → 0</b>se apaga al ${par.pista_fin}%${ahora}</div>`;
+}
 
 // --- Mis modelos ---
 function textoModelo(m) {
@@ -805,10 +826,14 @@ async function refrescarModelos() {
   j.value = r.activo;
   const guardados = r.modelos.filter((m) => m.clave !== "ultimo");
   $("#lista-modelos").innerHTML = guardados.length
-    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Guardado</th></tr>` +
-      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
+    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Pista del Bonus</th><th>Guardado</th></tr>` +
+      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${(m.pistas && m.pistas.length) ? m.pistas.map((p) => `${p.peso_inicial} → 0 al ${p.fin_pct}%`).join(", ") : "no"}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
     : `<p class="gris chico">Todavía no guardaste ninguno.</p>`;
 }
+
+$("#e-pista").addEventListener("change", () => {
+  for (const id of ["#e-pista-peso", "#e-pista-fin"]) $(id).disabled = !$("#e-pista").checked;
+});
 
 $("#b-guardar-modelo").addEventListener("click", () => accion(async () => {
   const nombre = $("#m-nombre").value.trim();
