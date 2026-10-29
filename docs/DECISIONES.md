@@ -14,6 +14,21 @@ Formato:
 
 ---
 
+## 2026-10-29 · Tamaño de la red configurable (solo desde cero)
+
+**Contexto:** todos los entrenamientos se estancan cerca de 850 puntos, sin importar horizonte, exploración ni pista. Facu quiere probar si el límite es la capacidad de la red.
+
+**Decisión:**
+
+- La pestaña Entrenar suma "Tamaño de la red" (`--oculta`: neuronas por cada una de las dos capas ocultas), con las opciones 256 (por defecto), 512 y 1024.
+- Solo se elige empezando de cero. Si se sigue un modelo, se usa el tamaño de ese modelo: la interfaz desactiva el campo y el entrenamiento ignora `--oculta` (lo avisa en la salida).
+- El tamaño real queda en `config.json` (`parametros.oculta`), en `estado.json` y en el snapshot (`entrenamiento.oculta`), y de ahí al `.json` de los modelos con nombre. Se muestra en la tarjeta del entrenamiento y en la columna "Red" de "Mis modelos".
+- **Hilos:** mientras se ajusta la red, los trabajadores esperan, así que la red usa todos los núcleos permitidos. Mientras se juega, sigue con pocos hilos. Antes la red usaba como máximo 4 hilos todo el tiempo, y con redes grandes el ajuste habría sido el cuello de botella.
+
+**Consecuencias:** una red más grande hace cada ajuste más lento, así que juega menos partidas por minuto. Para ver si el tamaño ayuda hay que comparar por partidas jugadas, no solo por minutos.
+
+---
+
 ## 2026-10-28 · Excepción controlada a "sin reward shaping": Pista del Bonus
 
 **Contexto:** los modelos casi nunca llegan al Bonus (entre 0.1% y 1.2% de las partidas), y ahí pierden hasta 120 puntos por partida. Facu decide hacer una excepción acotada a la regla "sin *reward shaping*" (decisión del 2026-10-10), solo para el Bonus.

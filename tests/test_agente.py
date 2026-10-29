@@ -143,3 +143,22 @@ def test_analisis_y_comparacion(tmp_path):
     r = json.loads((tmp_path / "y" / "estado.json").read_text())["resultado"]
     assert sum(r["victorias"]) == 20 and r["nombres"] == ["A", "B"]
     assert r["decisiones_distintas"] > 0  # dos redes al azar deciden distinto
+
+
+def test_tamano_de_la_red(tmp_path):
+    """Desde cero usa --oculta; siguiendo un modelo, usa el tamaño de ese modelo."""
+    comunes = ["--max-partidas", "20", "--entornos", "12", "--pasos", "64", "--minilote", "256",
+               "--registrar-cada", "0", "--max-cpu", "100"]  # fmt: skip
+    a = tmp_path / "a"
+    entrenar(["--carpeta", str(a), "--oculta", "48", *comunes])
+    red, metricas = cargar_snapshot(a / "modelo.pt")
+    assert red.oculta == 48 and metricas["entrenamiento"]["oculta"] == 48
+    assert json.loads((a / "config.json").read_text())["parametros"]["oculta"] == 48
+
+    b = tmp_path / "b"
+    entrenar(["--carpeta", str(b), "--desde", str(a / "modelo.pt"), "--oculta", "1024", *comunes])
+    red, metricas = cargar_snapshot(b / "modelo.pt")
+    assert red.oculta == 48 and metricas["entrenamiento"]["oculta"] == 48
+    assert json.loads((b / "config.json").read_text())["parametros"]["oculta"] == 48
+    estado = json.loads((b / "estado.json").read_text())
+    assert estado["entrenamiento"]["oculta"] == 48

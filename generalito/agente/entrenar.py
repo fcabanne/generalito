@@ -52,7 +52,12 @@ def _argumentos(argv):
     p.add_argument("--lambda-gae", type=float, default=0.95)
     p.add_argument("--recorte", type=float, default=0.2)
     p.add_argument("--entropia", type=float, default=0.01)
-    p.add_argument("--oculta", type=int, default=256)
+    p.add_argument(
+        "--oculta",
+        type=int,
+        default=256,
+        help="tamaño de la red (neuronas por capa); con --desde se usa el del modelo",
+    )
     # Pista del Bonus: excepción controlada a "sin reward shaping" (ver pista.py)
     p.add_argument(
         "--pista-bonus",
@@ -99,9 +104,26 @@ def main(argv: list[str] | None = None) -> int:
     from generalito.motor import CANTIDAD_JUGADAS, VERSION_REGLAS
 
     trabajadores = args.trabajadores or max(1, limites.hilos_cpu - 1)
-    # La red usa pocos hilos: lo pesado es jugar, y eso lo hacen los trabajadores
-    torch.set_num_threads(max(1, min(4, limites.hilos_cpu - trabajadores + 1)))
+    # Mientras se juega, la red usa pocos hilos: lo pesado lo hacen los trabajadores.
+    # Mientras se ajusta la red, los trabajadores esperan y la red usa todos los núcleos
+    # permitidos (importa con redes grandes).
+    hilos_jugando = max(1, min(4, limites.hilos_cpu - trabajadores + 1))
+    torch.set_num_threads(hilos_jugando)
     torch.manual_seed(args.semilla)
+
+    # --- Red ---
+    partidas_previas = 0
+    metricas_previas: dict = {}
+    if args.desde:
+        red, metricas_previas = cargar_snapshot(args.desde)
+        partidas_previas = metricas_previas.get("partidas_entrenadas", 0)
+        if red.oculta != args.oculta:
+            print(
+                f"Se sigue un modelo de tamaño {red.oculta}: se ignora --oculta {args.oculta}",
+                flush=True,
+            )
+    else:
+        red = Red(args.oculta)
 
     carpeta = args.carpeta or Path("corridas") / datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
     carpeta.mkdir(parents=True, exist_ok=True)
@@ -113,19 +135,14 @@ def main(argv: list[str] | None = None) -> int:
         "trabajadores": trabajadores,
         "version_reglas": VERSION_REGLAS,
         "version_codificacion": VERSION_CODIFICACION,
-        "parametros": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
+        "parametros": {
+            **{k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
+            "oculta": red.oculta,  # el tamaño real: si sigue un modelo, es el de ese modelo
+        },
         "limites": limites.como_dict(),
     }
     (carpeta / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
-    # --- Red ---
-    partidas_previas = 0
-    metricas_previas: dict = {}
-    if args.desde:
-        red, metricas_previas = cargar_snapshot(args.desde)
-        partidas_previas = metricas_previas.get("partidas_entrenadas", 0)
-    else:
-        red = Red(args.oculta)
     optimizador = torch.optim.Adam(red.parameters(), lr=args.aprendizaje, eps=1e-5)
 
     guardian = Guardian(limites, carpeta)
@@ -201,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             "entrenamiento": {
                 "lambda_gae": args.lambda_gae,
                 "entropia": args.entropia,
+                "oculta": red.oculta,
                 "pista": pista,
             },
             "pistas": pistas,
@@ -226,7 +244,11 @@ def main(argv: list[str] | None = None) -> int:
             "pausa": None if final else guardian.pausa,
             "pista": None if pista is None else {**pista, "peso_actual": round(peso_pista(), 4)},
             "pistas": pistas,
-            "entrenamiento": {"lambda_gae": args.lambda_gae, "entropia": args.entropia},
+            "entrenamiento": {
+                "lambda_gae": args.lambda_gae,
+                "entropia": args.entropia,
+                "oculta": red.oculta,
+            },
             "recursos": guardian.medir() if final else guardian.ultima_medicion or guardian.medir(),
         }
         (carpeta / "estado.json").write_text(json.dumps(estado), encoding="utf-8")
@@ -292,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             retornos = ventajas + valores[:t_max]
 
             # --- Ajustar la red ---
+            torch.set_num_threads(limites.hilos_cpu)
             red.train()
             b_est = torch.from_numpy(estados[:t_max].reshape(-1, TAMANO_ESTADO))
             b_mas = torch.from_numpy(mascaras[:t_max].reshape(-1, CANTIDAD_JUGADAS))
@@ -321,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
                     torch.nn.utils.clip_grad_norm_(red.parameters(), 0.5)
                     optimizador.step()
 
+            torch.set_num_threads(hilos_jugando)
             estados[0], mascaras[0] = estados[t_max], mascaras[t_max]
 
             # --- Progreso ---

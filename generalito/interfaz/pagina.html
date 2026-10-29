@@ -211,6 +211,7 @@
           </div>
           <span class="chico gris">Excepción controlada: adelanta el valor de acercarse a 60 en los números y lo descuenta al final (no cambia el puntaje). Peso inicial, que baja a 0 en ese % del entrenamiento.</span>
         </div>
+        <label>Tamaño de la red<select id="e-oculta"><option value="256">256 (la de siempre)</option><option value="512">512</option><option value="1024">1024</option></select><span id="e-oculta-ayuda">Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento.</span></label>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
@@ -766,6 +767,7 @@ async function refrescarEntrenamientos() {
         <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
         <div>Horizonte<b>${(c.config.parametros && c.config.parametros.lambda_gae) ?? 0.95}</b>lambda-gae</div>
         <div>Exploración<b>${(c.config.parametros && c.config.parametros.entropia) ?? 0.01}</b>entropía</div>
+        <div>Tamaño de la red<b>${(c.config.parametros && c.config.parametros.oculta) || (c.config.desde ? "el del modelo" : 256)}</b>neuronas por capa</div>
         ${textoPista(c.config.parametros, e.pista)}
         <div>Núcleos<b>${(c.config.parametros && c.config.parametros.hilos) ?? "–"}</b></div>
       </div>
@@ -789,6 +791,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     hilos: +$("#e-hilos").value,
     desde: $("#e-desde").value,
     lambda_gae: $("#e-lambda").value,
+    oculta: $("#e-oculta").value,
     entropia: $("#e-entropia").value,
     pista: { activa: $("#e-pista").checked, peso: $("#e-pista-peso").value, fin_pct: $("#e-pista-fin").value },
   });
@@ -815,6 +818,7 @@ async function refrescarModelos() {
   const desde = $("#e-desde"), elegido = desde.value;
   desde.innerHTML = `<option value="cero">Cero (sin saber nada)</option>` + opciones;
   desde.value = [...desde.options].some((o) => o.value === elegido) ? elegido : (r.modelos.length ? r.modelos[0].clave : "cero");
+  actualizarTamano();
   for (const [id, i] of [["#a-modelo", 0], ["#c-a", 0], ["#c-b", 1]]) {
     const sel = $(id), antes = sel.value;
     sel.innerHTML = opciones || `<option value="">(ninguno todavía)</option>`;
@@ -826,10 +830,19 @@ async function refrescarModelos() {
   j.value = r.activo;
   const guardados = r.modelos.filter((m) => m.clave !== "ultimo");
   $("#lista-modelos").innerHTML = guardados.length
-    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Pista del Bonus</th><th>Guardado</th></tr>` +
-      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${(m.pistas && m.pistas.length) ? m.pistas.map((p) => `${p.peso_inicial} → 0 al ${p.fin_pct}%`).join(", ") : "no"}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
+    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Red</th><th>Pista del Bonus</th><th>Guardado</th></tr>` +
+      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${(m.entrenamiento && m.entrenamiento.oculta) || "–"}</td><td>${(m.pistas && m.pistas.length) ? m.pistas.map((p) => `${p.peso_inicial} → 0 al ${p.fin_pct}%`).join(", ") : "no"}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
     : `<p class="gris chico">Todavía no guardaste ninguno.</p>`;
 }
+
+function actualizarTamano() {
+  const desdeCero = $("#e-desde").value === "cero";
+  $("#e-oculta").disabled = !desdeCero;
+  $("#e-oculta-ayuda").textContent = desdeCero
+    ? "Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento."
+    : "Se usa el tamaño del modelo que vas a seguir (solo se elige empezando de cero).";
+}
+$("#e-desde").addEventListener("change", actualizarTamano);
 
 $("#e-pista").addEventListener("change", () => {
   for (const id of ["#e-pista-peso", "#e-pista-fin"]) $(id).disabled = !$("#e-pista").checked;

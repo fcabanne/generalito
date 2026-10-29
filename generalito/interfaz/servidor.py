@@ -34,6 +34,7 @@ from generalito.recursos import ARCHIVO_PARAR, Limites, temperatura_gpu
 
 PAGINA = Path(__file__).with_name("pagina.html")
 MAX_PARTIDAS_EN_MEMORIA = 50
+TAMANOS_RED = (256, 512, 1024)
 LAMBDA_GAE_DEFECTO = 0.95  # los mismos valores por defecto que generalito-entrenar
 ENTROPIA_DEFECTO = 0.01
 
@@ -253,9 +254,15 @@ class Corridas:
         ]  # fmt: skip
         desde = None
         clave = pedido.get("desde", "cero")
+        oculta = None  # si sigue un modelo, usa el tamaño de ese modelo
         if clave != "cero":
             desde = str(self.catalogo.ruta(clave))
             args += ["--desde", desde]
+        else:
+            oculta = int(pedido.get("oculta") or TAMANOS_RED[0])
+            if oculta not in TAMANOS_RED:
+                raise ValueError("El tamaño de la red tiene que ser 256, 512 o 1024")
+            args += ["--oculta", str(oculta)]
         provisoria = {
             "programa": "entrenar",
             "jugador": "agente",
@@ -265,6 +272,7 @@ class Corridas:
                 "entropia": entropia,
                 "pista_bonus": pista_bonus,
                 "pista_fin": pista_fin,
+                "oculta": oculta,
             },
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }
