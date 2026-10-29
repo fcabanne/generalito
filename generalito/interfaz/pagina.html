@@ -215,16 +215,20 @@
         <div class="pista-campo">
           <span>Objetivo</span>
           <div class="fila" style="gap:6px;flex-wrap:nowrap">
-            <select id="e-objetivo"><option value="puntaje">Máximo puntaje</option><option value="superar">Superar X puntos</option></select>
+            <select id="e-objetivo"><option value="puntaje">Máximo puntaje</option><option value="mixto">Puntos + premio si llega a X</option><option value="superar">Superar X puntos (todo o nada)</option></select>
+          </div>
+          <div class="fila" style="gap:6px;flex-wrap:nowrap;margin-top:4px">
             <span class="chico gris" style="white-space:nowrap">X =</span>
-            <input id="e-umbral" class="campo" type="number" value="950" min="1" max="1704" step="10" style="width:80px" disabled>
+            <input id="e-umbral" class="campo" type="number" value="950" min="1" max="1704" step="10" style="width:76px" disabled>
+            <span class="chico gris" style="white-space:nowrap">P =</span>
+            <input id="e-premio" class="campo" type="number" value="100" min="1" max="1000" step="10" style="width:70px" disabled title="Premio extra en puntos">
           </div>
           <div class="fila" style="gap:6px;flex-wrap:nowrap;margin-top:4px">
             <span class="chico gris" style="white-space:nowrap">Calentamiento</span>
             <input id="e-calentamiento" class="campo" type="number" value="5" min="0" max="50" step="1" style="width:64px">
             <span class="chico gris">%</span>
           </div>
-          <span class="chico gris" id="e-objetivo-ayuda">Qué se premia. "Superar X": solo 1 al final si llega a X puntos, 0 si no.</span>
+          <span class="chico gris" id="e-objetivo-ayuda"></span>
         </div>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
@@ -732,7 +736,8 @@ function conectarCurvas(caja, porId) {
       const cx = 40 + ((cerca.partidas - xMin) / (xMax - xMin)) * (700 - 40 - CURVA_DER);
       cruz.setAttribute("x1", cx); cruz.setAttribute("x2", cx); cruz.classList.remove("oculto");
       const extra = cerca.supera_950_pct != null ? ` · ${cerca.supera_950_pct}% llega a 950` : "";
-      const extraX = cerca.supera_umbral_pct != null ? ` · ${cerca.supera_umbral_pct}% llega a ${cerca.umbral}` : "";
+      const extraX = (cerca.supera_umbral_pct != null ? ` · ${cerca.supera_umbral_pct}% llega a ${cerca.umbral}` : "") +
+        (cerca.puntaje_mixto != null ? ` · ${cerca.puntaje_mixto} con premio` : "");
       const calentando = cerca.calentando ? ", calentando" : "";
       tip.textContent = `${cerca.partidas.toLocaleString("es-AR")} partidas · ${cerca.promedio} puntos${extra}${extraX} (${cerca.tipo}${calentando})`;
       const caja2 = histo.getBoundingClientRect();
@@ -779,10 +784,10 @@ async function refrescarEntrenamientos() {
       </div>
       <div class="cifras" style="margin-top:10px">
         <div>Examen actual<b>${ultimaEval ? ultimaEval.promedio : "–"}</b>puntos de promedio${ultimaEval && ultimaEval.supera_950_pct != null ? ` · ${ultimaEval.supera_950_pct}% llega a 950` : ""}</div>
-        ${objetivo.tipo === "superar" ? `<div>Llega a ${objetivo.umbral}<b>${ultimaEval && ultimaEval.supera_umbral_pct != null ? ultimaEval.supera_umbral_pct + "%" : "–"}</b>en el examen</div>` : ""}
-        <div>Mejor examen<b>${e.mejor_evaluacion == null ? "–" : e.criterio_mejor === "supera" ? e.mejor_evaluacion + "%" : e.mejor_evaluacion}</b>${e.criterio_mejor === "supera" ? `llega a ${objetivo.umbral}` : "puntos"}</div>
+        ${objetivo.tipo === "superar" || objetivo.tipo === "mixto" ? `<div>Llega a ${objetivo.umbral}<b>${ultimaEval && ultimaEval.supera_umbral_pct != null ? ultimaEval.supera_umbral_pct + "%" : "–"}</b>${ultimaEval && ultimaEval.puntaje_mixto != null ? `con premio: ${ultimaEval.puntaje_mixto}` : "en el examen"}</div>` : ""}
+        <div>Mejor examen<b>${e.mejor_evaluacion == null ? "–" : e.criterio_mejor === "supera" ? e.mejor_evaluacion + "%" : e.mejor_evaluacion}</b>${e.criterio_mejor === "supera" ? `llega a ${objetivo.umbral}` : e.criterio_mejor === "mixto" ? "puntos con premio" : "puntos"}</div>
         ${textoCalentamiento(e.calentamiento)}
-        <div>Objetivo<b>${objetivo.tipo === "superar" ? `Superar ${objetivo.umbral}` : "Máximo puntaje"}</b>${e.supera_recientes && e.supera_recientes.pct != null ? `recientes: ${e.supera_recientes.pct}% llega a ${e.supera_recientes.umbral}` : ""}</div>
+        <div>Objetivo<b>${textoObjetivo(objetivo)}</b>${e.supera_recientes && e.supera_recientes.pct != null ? `recientes: ${e.supera_recientes.pct}% llega a ${e.supera_recientes.umbral}` : ""}</div>
         <div>Partidas jugadas<b>${(e.partidas_totales ?? 0).toLocaleString("es-AR")}</b></div>
         <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
         <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
@@ -813,7 +818,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     desde: $("#e-desde").value,
     lambda_gae: $("#e-lambda").value,
     oculta: $("#e-oculta").value,
-    objetivo: { tipo: $("#e-objetivo").value, umbral: $("#e-umbral").value },
+    objetivo: { tipo: $("#e-objetivo").value, umbral: $("#e-umbral").value, premio: $("#e-premio").value },
     calentamiento: $("#e-calentamiento").value,
     entropia: $("#e-entropia").value,
     pista: { activa: $("#e-pista").checked, peso: $("#e-pista-peso").value, fin_pct: $("#e-pista-fin").value },
@@ -866,7 +871,9 @@ function textoCalentamiento(c) {
 
 function textoObjetivo(o) {
   if (!o) return "–";
-  return o.tipo === "superar" ? `Superar ${o.umbral}` : "Máximo puntaje";
+  if (o.tipo === "superar") return `Superar ${o.umbral}`;
+  if (o.tipo === "mixto") return `Puntos + ${o.premio} si llega a ${o.umbral}`;
+  return "Máximo puntaje";
 }
 
 function actualizarTamano() {
@@ -875,18 +882,24 @@ function actualizarTamano() {
   $("#e-oculta-ayuda").textContent = desdeCero
     ? "Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento."
     : "Se usa el tamaño del modelo que vas a seguir (solo se elige empezando de cero).";
-  // "Superar X" solo siguiendo un modelo entrenado
-  if (desdeCero) $("#e-objetivo").value = "puntaje";
+  // "Superar X" (todo o nada) solo siguiendo un modelo entrenado
+  if (desdeCero && $("#e-objetivo").value === "superar") $("#e-objetivo").value = "puntaje";
   $("#e-calentamiento").disabled = desdeCero;
   $("#e-objetivo").querySelector('[value="superar"]').disabled = desdeCero;
-  $("#e-objetivo-ayuda").textContent = desdeCero
-    ? "Empezando de cero solo se puede “Máximo puntaje”. “Superar X” se usa siguiendo un modelo entrenado."
-    : "Qué se premia. “Superar X”: solo 1 al final si llega a X puntos, 0 si no. Si el objetivo cambia respecto del modelo, durante el % de calentamiento solo se recalibra la estimación de valor y la forma de jugar no se toca.";
   actualizarObjetivo();
 }
+const AYUDA_OBJETIVO = {
+  puntaje: "Qué se premia: los puntos de cada anotación.",
+  mixto: "Los puntos de cada anotación, más P puntos extra al final si el total llega a X.",
+  superar: "Solo 1 al final si el total llega a X, 0 si no (todo o nada).",
+};
 function actualizarObjetivo() {
-  const superar = $("#e-objetivo").value === "superar";
-  $("#e-umbral").disabled = !superar;
+  const tipo = $("#e-objetivo").value, superar = tipo === "superar";
+  $("#e-umbral").disabled = tipo === "puntaje";
+  $("#e-premio").disabled = tipo !== "mixto";
+  const desdeCero = $("#e-desde").value === "cero";
+  $("#e-objetivo-ayuda").textContent = AYUDA_OBJETIVO[tipo] +
+    (desdeCero ? " Empezando de cero no se puede “Superar X”." : " Si el objetivo cambia respecto del modelo, durante el % de calentamiento solo se recalibra la estimación de valor y la forma de jugar no se toca.");
   // La pista del Bonus no se combina con "Superar X"
   if (superar) $("#e-pista").checked = false;
   $("#e-pista").disabled = superar;

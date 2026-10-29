@@ -61,11 +61,13 @@ def _argumentos(argv):
     # Objetivo: qué se premia (ver DECISIONES.md, 2026-10-29)
     p.add_argument(
         "--objetivo",
-        choices=["puntaje", "superar"],
+        choices=["puntaje", "superar", "mixto"],
         default="puntaje",
-        help="puntaje: puntos por anotación; superar: 1 al final si el total llega a --umbral",
+        help="puntaje: puntos por anotación; superar: 1 al final si el total llega a --umbral;"
+        " mixto: puntos por anotación + --premio al final si el total llega a --umbral",
     )
-    p.add_argument("--umbral", type=int, default=950, help="X del objetivo 'superar'")
+    p.add_argument("--umbral", type=int, default=950, help="X de los objetivos superar y mixto")
+    p.add_argument("--premio", type=float, default=100, help="P del objetivo mixto, en puntos")
     p.add_argument(
         "--calentamiento",
         type=float,
@@ -101,8 +103,10 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("El objetivo 'superar' solo se usa siguiendo un modelo (--desde)")
         if args.pista_bonus > 0:
             raise SystemExit("La pista del Bonus no se combina con el objetivo 'superar'")
-        if not 1 <= args.umbral <= 1704:
-            raise SystemExit("El umbral tiene que estar entre 1 y 1704")
+    if args.objetivo in ("superar", "mixto") and not 1 <= args.umbral <= 1704:
+        raise SystemExit("El umbral tiene que estar entre 1 y 1704")
+    if args.objetivo == "mixto" and not 0 < args.premio <= 1000:
+        raise SystemExit("El premio tiene que estar entre 1 y 1000 puntos")
     limites = Limites(
         max_partidas=args.max_partidas,
         max_minutos=args.minutos,
@@ -155,17 +159,28 @@ def main(argv: list[str] | None = None) -> int:
     objetivo = {"tipo": "puntaje"}
     if args.objetivo == "superar":
         objetivo = {"tipo": "superar", "umbral": args.umbral}
+    elif args.objetivo == "mixto":
+        premio = int(args.premio) if float(args.premio).is_integer() else args.premio
+        objetivo = {"tipo": "mixto", "umbral": args.umbral, "premio": premio}
     objetivo_previo = metricas_previas.get("entrenamiento", {}).get("objetivo", {"tipo": "puntaje"})
+    objetivo_cambio = bool(args.desde) and objetivo_previo != objetivo
+
+    def escala(o: dict) -> str:
+        """En qué se mide la recompensa: 'chance' (0 o 1) o 'puntos'."""
+        return "chance" if o.get("tipo") == "superar" else "puntos"
+
     valor_reiniciado = False
-    if args.desde and objetivo_previo != objetivo:
-        # La salida de valor estimaba otra cosa (puntos que faltan, o la chance de
-        # superar otro X): se reinicia. La política, lo que sabe jugar, se conserva.
+    if objetivo_cambio and escala(objetivo_previo) != escala(objetivo):
+        # La salida de valor estimaba otra cosa en otra escala (puntos que faltan, o la
+        # chance de superar X): se reinicia. La política, lo que sabe jugar, se conserva.
         red.valor.reset_parameters()
         valor_reiniciado = True
         print(f"Objetivo nuevo {objetivo}: se reinicia la estimación de valor", flush=True)
+    elif objetivo_cambio:
+        print(f"Objetivo nuevo {objetivo}: se recalibra la estimación de valor", flush=True)
 
-    # Solo hay calentamiento si se reinició la estimación de valor (cambió el objetivo)
-    calentamiento_pct = max(0.0, min(100.0, args.calentamiento)) if valor_reiniciado else 0.0
+    # Calentamiento solo si cambió el objetivo respecto del modelo que se sigue
+    calentamiento_pct = max(0.0, min(100.0, args.calentamiento)) if objetivo_cambio else 0.0
 
     carpeta = args.carpeta or Path("corridas") / datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
     carpeta.mkdir(parents=True, exist_ok=True)
@@ -240,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
         min_libre_gb=limites.min_disco_libre_gb,
         peso_pista=pista["peso_inicial"] if pista else 0.0,
         umbral=objetivo.get("umbral"),
+        premio=objetivo.get("premio"),
     )
 
     estados = np.zeros((t_max + 1, n, TAMANO_ESTADO), dtype=np.float32)
@@ -257,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     curva: list[dict] = []
     evaluaciones: list[dict] = []
     mejor_eval = -1.0
-    criterio = "supera" if objetivo["tipo"] == "superar" else "promedio"
+    criterio = {"superar": "supera", "mixto": "mixto"}.get(objetivo["tipo"], "promedio")
     umbral_seguido = objetivo.get("umbral", UMBRAL_REFERENCIA)
     ultima_eval = time.monotonic()
     ultimo_reporte = 0.0
@@ -333,11 +349,19 @@ def main(argv: list[str] | None = None) -> int:
             "promedio": round(statistics.fmean(totales), 1),
             "supera_950_pct": porcentaje_que_supera(totales, UMBRAL_REFERENCIA),
         }
-        if objetivo["tipo"] == "superar":
+        if objetivo["tipo"] in ("superar", "mixto"):
             examen["umbral"] = objetivo["umbral"]
             examen["supera_umbral_pct"] = porcentaje_que_supera(totales, objetivo["umbral"])
+        if objetivo["tipo"] == "mixto":
+            # Lo que el agente espera ganar por partida: puntos + premio × chance de llegar
+            examen["puntaje_mixto"] = round(
+                examen["promedio"] + objetivo["premio"] * examen["supera_umbral_pct"] / 100, 1
+            )
         # El mejor modelo se elige por lo que se está optimizando
-        valor = examen["supera_umbral_pct"] if criterio == "supera" else examen["promedio"]
+        valor = {
+            "supera": examen.get("supera_umbral_pct"),
+            "mixto": examen.get("puntaje_mixto"),
+        }.get(criterio, examen["promedio"])
         examen["mejor"] = valor > mejor_eval
         evaluaciones.append(examen)
         guardar_snapshot(red, carpeta / "modelo.pt", metricas())
@@ -345,8 +369,10 @@ def main(argv: list[str] | None = None) -> int:
             mejor_eval = valor
             guardar_snapshot(red, carpeta / "mejor.pt", metricas())
         extra = ""
-        if criterio == "supera":
+        if criterio in ("supera", "mixto"):
             extra = f" · {examen['supera_umbral_pct']}% llega a {objetivo['umbral']}"
+        if criterio == "mixto":
+            extra += f" · {examen['puntaje_mixto']} con premio"
         print(
             f"Examen: {examen['promedio']} puntos de promedio, "
             f"{examen['supera_950_pct']}% llega a {UMBRAL_REFERENCIA}{extra}",

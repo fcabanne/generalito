@@ -79,7 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     umbrales = [UMBRAL_REFERENCIA]
     for _, metricas in cargados:
         objetivo = (metricas or {}).get("entrenamiento", {}).get("objetivo") or {}
-        if objetivo.get("tipo") == "superar" and objetivo.get("umbral") not in umbrales:
+        tiene_umbral = objetivo.get("tipo") in ("superar", "mixto")
+        if tiene_umbral and objetivo.get("umbral") not in umbrales:
             umbrales.append(objetivo["umbral"])
     guardian = Guardian(limites, carpeta)
 

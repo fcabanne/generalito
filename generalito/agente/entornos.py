@@ -32,11 +32,15 @@ class _Grupo:
         registrar_cada: int,
         peso_pista: float = 0.0,
         umbral: int | None = None,
+        premio: float | None = None,
     ) -> None:
         self.rng = random.Random(semilla)
-        # Objetivo "Superar X": si hay umbral, la recompensa es solo al final de la
-        # partida (1 si el total llega al umbral, 0 si no). Si no, puntos por anotación.
+        # Objetivo (ver DECISIONES.md):
+        # - sin umbral: puntos por anotación ("Máximo puntaje");
+        # - umbral sin premio: solo al final, 1 si el total llega al umbral ("Superar X");
+        # - umbral y premio: puntos por anotación + premio al final si llega ("Mixto").
         self.umbral = umbral
+        self.premio = premio
         # Peso de la pista del Bonus para las partidas que empiezan desde ahora.
         # Cada partida guarda el suyo, fijo hasta que termina (ver pista.py).
         self.peso_pista = peso_pista
@@ -91,12 +95,14 @@ class _Grupo:
             peso = self.pesos[i]
             phi_antes = potencial_partida(p) if peso else 0.0
             p.aplicar(jugada)
-            if self.umbral is not None:
+            if self.umbral is not None and self.premio is None:
                 recompensas[i] = float(p.terminada and p.total() >= self.umbral)
             else:
                 recompensa = p.total() - antes
                 if peso:
                     recompensa += peso * (potencial_partida(p) - phi_antes)
+                if self.premio is not None and p.terminada and p.total() >= self.umbral:
+                    recompensa += self.premio
                 recompensas[i] = recompensa / ESCALA_RECOMPENSA
             if p.terminada:
                 terminadas[i] = 1.0
@@ -119,7 +125,7 @@ class _Grupo:
 
 
 def _trabajador(
-    conexion, n, semilla, id_base, registro_kwargs, registrar_cada, peso_pista, umbral
+    conexion, n, semilla, id_base, registro_kwargs, registrar_cada, peso_pista, umbral, premio
 ) -> None:
     try:  # prioridad baja también en los trabajadores
         import psutil
@@ -127,7 +133,7 @@ def _trabajador(
         psutil.Process().nice(getattr(psutil, "BELOW_NORMAL_PRIORITY_CLASS", 10))
     except Exception:  # noqa: BLE001
         pass
-    grupo = _Grupo(n, semilla, id_base, registro_kwargs, registrar_cada, peso_pista, umbral)
+    grupo = _Grupo(n, semilla, id_base, registro_kwargs, registrar_cada, peso_pista, umbral, premio)
     while True:
         orden, datos = conexion.recv()
         if orden == "observar":
@@ -154,6 +160,7 @@ class Entornos:
         min_libre_gb: float = 0,
         peso_pista: float = 0.0,
         umbral: int | None = None,
+        premio: float | None = None,
     ) -> None:
         self.n = n
         trabajadores = max(1, min(trabajadores, n))
@@ -174,7 +181,7 @@ class Entornos:
 
         if trabajadores == 1:
             self.grupo_local = _Grupo(
-                n, semilla, 0, kwargs_registro(0), registrar_cada, peso_pista, umbral
+                n, semilla, 0, kwargs_registro(0), registrar_cada, peso_pista, umbral, premio
             )
             return
         contexto = mp.get_context("spawn")  # igual en Windows, Mac y Linux
@@ -191,6 +198,7 @@ class Entornos:
                     registrar_cada,
                     peso_pista,
                     umbral,
+                    premio,
                 ),
                 daemon=True,
             )

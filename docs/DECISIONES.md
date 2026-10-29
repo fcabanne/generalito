@@ -14,6 +14,22 @@ Formato:
 
 ---
 
+## 2026-10-29 · Objetivo mixto: puntos + premio por llegar a X
+
+**Contexto:** con "Superar 950" (todo o nada), Facu ve que el modelo se desarma apenas termina el calentamiento: baja de 850 a 760 en un par de minutos. Con una sola señal de 0 o 1 al final, casi todas las partidas valen 0 y la política pierde lo que sabía.
+
+**Decisión:**
+
+- **Objetivo "Puntos + premio si llega a X"** (`--objetivo mixto --umbral X --premio P`; en la interfaz, X = 950 y P = 100 por defecto). La recompensa son los puntos normales de cada anotación y, en la última jugada, P puntos extra si el total llega a X (total ≥ X). Sumado en la partida: total + P × [total ≥ X].
+- **Es otro objetivo, no una pista:** cambia qué se optimiza (el promedio más P veces la chance de llegar a X). No adelanta nada ni sugiere cómo jugar. Es el término medio entre "Máximo puntaje" (P = 0) y "Superar X" (solo el premio).
+- **Se puede usar desde un modelo entrenado y también desde cero**, porque la señal no es escasa: sigue habiendo puntos en cada anotación. Se combina con la Pista del Bonus, porque los dos están en puntos.
+- **Calentamiento sin reinicio:** al pasar de "Máximo puntaje" a mixto, la estimación de valor está en la misma escala (puntos), así que no se reinicia. Solo se recalibra durante el calentamiento, con la política quieta. Regla general: el valor se reinicia solo si cambia la escala (puntos ↔ chance de "Superar X"), y el calentamiento se activa siempre que cambie el objetivo.
+- **Mejor modelo:** se elige por lo que se optimiza: promedio + P × % que llega a X (`puntaje_mixto` en cada examen). Los exámenes y Análisis informan también el % que llega a X y a 950.
+
+**Consecuencias:** si P es chico frente a la diferencia de puntos que cuesta arriesgarse, el modelo va a jugar casi igual que con "Máximo puntaje". Si es muy grande, se parece a "Superar X". Conviene probar con varios valores de P.
+
+---
+
 ## 2026-10-29 · Calentamiento de la estimación de valor al cambiar de objetivo
 
 **Contexto:** al pasar de "Máximo puntaje" a "Superar X" se reinicia la salida de valor de la red. En una prueba corta, el % de partidas que llegaba a X bajó en los primeros exámenes (25% → 15% → 11%). Mientras la estimación de valor está recién reiniciada, las ventajas que guían a la política son casi ruido, y la política se mueve sin rumbo.

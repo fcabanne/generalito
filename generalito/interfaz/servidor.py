@@ -265,8 +265,17 @@ class Corridas:
             args += ["--oculta", str(oculta)]
         objetivo = pedido.get("objetivo") or {}
         objetivo_tipo = objetivo.get("tipo", "puntaje")
-        umbral = None
-        if objetivo_tipo == "superar":
+        umbral = premio = None
+        if objetivo_tipo == "mixto":
+            umbral = int(float(objetivo.get("umbral") or 950))
+            premio = float(objetivo.get("premio") or 100)
+            if not 1 <= umbral <= 1704:
+                raise ValueError("X tiene que estar entre 1 y 1704 puntos.")
+            if not 0 < premio <= 1000:
+                raise ValueError("El premio P tiene que estar entre 1 y 1000 puntos.")
+            premio = int(premio) if premio.is_integer() else premio
+            args += ["--objetivo", "mixto", "--umbral", str(umbral), "--premio", str(premio)]
+        elif objetivo_tipo == "superar":
             if desde is None:
                 raise ValueError(
                     "El objetivo 'Superar X puntos' solo se usa siguiendo un modelo entrenado."
@@ -289,7 +298,11 @@ class Corridas:
             "programa": "entrenar",
             "jugador": "agente",
             "desde": desde,
-            "objetivo": {"tipo": objetivo_tipo, **({"umbral": umbral} if umbral else {})},
+            "objetivo": {
+                "tipo": objetivo_tipo,
+                **({"umbral": umbral} if umbral else {}),
+                **({"premio": premio} if premio else {}),
+            },
             "parametros": {
                 "lambda_gae": lambda_gae,
                 "entropia": entropia,

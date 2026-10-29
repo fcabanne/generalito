@@ -168,10 +168,14 @@ def test_entrenar_con_horizonte(tmp_path):
         pista = {"activa": True, "peso": 0.5, "fin_pct": 40}
         codigo, _ = pedir(url, "/api/entrenamientos", {"minutos": 1, "oculta": 300})
         assert codigo == 400
+        malo = {"minutos": 1, "objetivo": {"tipo": "mixto", "umbral": 950, "premio": 5000}}
+        codigo, _ = pedir(url, "/api/entrenamientos", malo)
+        assert codigo == 400
         superar = {"minutos": 1, "objetivo": {"tipo": "superar", "umbral": 900}}
         codigo, error = pedir(url, "/api/entrenamientos", superar)  # desde cero: no
         assert codigo == 400 and "siguiendo un modelo" in error["error"]
         pedido = {
+            "objetivo": {"tipo": "mixto", "umbral": 950, "premio": 100},
             "minutos": 1,
             "lambda_gae": 0.99,
             "entropia": 0.02,
@@ -191,6 +195,9 @@ def test_entrenar_con_horizonte(tmp_path):
         assert proceso.args[proceso.args.index("--pista-fin") + 1] == "40.0"
         assert proceso.args[proceso.args.index("--oculta") + 1] == "512"
         assert config["parametros"]["oculta"] == 512
+        assert config["objetivo"] == {"tipo": "mixto", "umbral": 950, "premio": 100}
+        assert proceso.args[proceso.args.index("--objetivo") + 1] == "mixto"
+        assert proceso.args[proceso.args.index("--premio") + 1] == "100"
         proceso.terminate()
         proceso.wait(timeout=30)
     finally:
