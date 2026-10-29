@@ -77,3 +77,40 @@ def test_entrenar_para_superar(tmp_path):
               "--carpeta", str(tmp_path / "an"), "--max-cpu", "100"])  # fmt: skip
     r = json.loads((tmp_path / "an" / "estado.json").read_text())["resultado"]
     assert [u["umbral"] for u in r["supera"]] == [950, 300]
+
+
+def test_calentamiento_no_toca_la_politica(tmp_path):
+    torch = pytest.importorskip("torch")
+    from generalito.agente.entrenar import main as entrenar
+
+    def pesos(ruta):
+        return torch.load(ruta, map_location="cpu", weights_only=False)["pesos"]
+
+    comunes = ["--max-partidas", "30", "--entornos", "12", "--pasos", "64", "--minilote", "256",
+               "--oculta", "32", "--registrar-cada", "0", "--max-cpu", "100"]  # fmt: skip
+    base = tmp_path / "base"
+    entrenar(["--carpeta", str(base), *comunes])
+    modelo = base / "modelo.pt"
+
+    # Cambia el objetivo y el calentamiento cubre todo el entrenamiento:
+    # la política y el tronco quedan idénticos; solo se mueve la salida de valor.
+    a = tmp_path / "a"
+    entrenar(["--carpeta", str(a), "--desde", str(modelo), "--objetivo", "superar",
+              "--umbral", "300", "--calentamiento", "100", *comunes])  # fmt: skip
+    antes, despues = pesos(modelo), pesos(a / "modelo.pt")
+    for nombre in antes:
+        if nombre.startswith("valor"):
+            assert not torch.equal(antes[nombre], despues[nombre]), nombre
+        else:
+            assert torch.equal(antes[nombre], despues[nombre]), nombre
+    estado = json.loads((a / "estado.json").read_text())
+    assert estado["calentamiento"]["pct"] == 100
+    assert all(p.get("calentando") for p in estado["curva"])
+
+    # Mismo objetivo que el modelo: no hay calentamiento y la política sí aprende
+    b = tmp_path / "b"
+    entrenar(["--carpeta", str(b), "--desde", str(modelo), "--calentamiento", "100", *comunes])
+    assert json.loads((b / "config.json").read_text())["calentamiento_pct"] == 0
+    assert not torch.equal(
+        pesos(modelo)["politica.weight"], pesos(b / "modelo.pt")["politica.weight"]
+    )

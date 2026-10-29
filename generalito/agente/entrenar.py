@@ -66,6 +66,12 @@ def _argumentos(argv):
         help="puntaje: puntos por anotación; superar: 1 al final si el total llega a --umbral",
     )
     p.add_argument("--umbral", type=int, default=950, help="X del objetivo 'superar'")
+    p.add_argument(
+        "--calentamiento",
+        type=float,
+        default=5,
+        help="%% del entrenamiento en que, si cambió el objetivo, solo se recalibra el valor",
+    )
     # Pista del Bonus: excepción controlada a "sin reward shaping" (ver pista.py)
     p.add_argument(
         "--pista-bonus",
@@ -158,6 +164,9 @@ def main(argv: list[str] | None = None) -> int:
         valor_reiniciado = True
         print(f"Objetivo nuevo {objetivo}: se reinicia la estimación de valor", flush=True)
 
+    # Solo hay calentamiento si se reinició la estimación de valor (cambió el objetivo)
+    calentamiento_pct = max(0.0, min(100.0, args.calentamiento)) if valor_reiniciado else 0.0
+
     carpeta = args.carpeta or Path("corridas") / datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
     carpeta.mkdir(parents=True, exist_ok=True)
     config = {
@@ -167,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         "desde": str(args.desde) if args.desde else None,
         "objetivo": objetivo,
         "valor_reiniciado": valor_reiniciado,
+        "calentamiento_pct": calentamiento_pct,
         "trabajadores": trabajadores,
         "version_reglas": VERSION_REGLAS,
         "version_codificacion": VERSION_CODIFICACION,
@@ -179,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
     (carpeta / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     optimizador = torch.optim.Adam(red.parameters(), lr=args.aprendizaje, eps=1e-5)
+    # Calentamiento: mientras dura, solo se ajusta la salida de valor (con su propio
+    # optimizador) y la política queda intacta. Ver DECISIONES.md, 2026-10-29.
+    optimizador_valor = torch.optim.Adam(red.valor.parameters(), lr=args.aprendizaje, eps=1e-5)
 
     guardian = Guardian(limites, carpeta)
     print(
@@ -205,6 +218,9 @@ def main(argv: list[str] | None = None) -> int:
         if limites.max_partidas:
             partes.append(partidas_terminadas / limites.max_partidas)
         return min(1.0, max(partes))
+
+    def calentando() -> bool:
+        return calentamiento_pct > 0 and progreso() < calentamiento_pct / 100
 
     def peso_pista() -> float:
         if pista is None:
@@ -258,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
                 "entropia": args.entropia,
                 "oculta": red.oculta,
                 "objetivo": objetivo,
+                "calentamiento_pct": calentamiento_pct,
                 "pista": pista,
             },
             "pistas": pistas,
@@ -288,6 +305,12 @@ def main(argv: list[str] | None = None) -> int:
                 "entropia": args.entropia,
                 "oculta": red.oculta,
                 "objetivo": objetivo,
+                "calentamiento_pct": calentamiento_pct,
+            },
+            "calentamiento": {
+                "pct": calentamiento_pct,
+                "activo": calentando(),
+                "terminado": calentamiento_pct > 0 and not calentando(),
             },
             "criterio_mejor": criterio,
             "supera_recientes": {
@@ -340,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
             # --- Jugar una tanda ---
             red.eval()
             peso = peso_pista()  # para las partidas que empiecen en esta tanda
+            solo_valor = calentando()  # se decide al empezar la tanda
             with torch.no_grad():
                 for t in range(t_max):
                     logits, v = red(torch.from_numpy(estados[t]), torch.from_numpy(mascaras[t]))
@@ -385,6 +409,17 @@ def main(argv: list[str] | None = None) -> int:
                 orden = torch.randperm(muestras)
                 for inicio in range(0, muestras, args.minilote):
                     idx = orden[inicio : inicio + args.minilote]
+                    if solo_valor:
+                        # Calentamiento: la política y el tronco no se tocan
+                        with torch.no_grad():
+                            h = red.tronco(b_est[idx])
+                        v = red.valor(h).squeeze(-1)
+                        perdida_val = 0.5 * ((v - b_ret[idx]) ** 2).mean()
+                        optimizador_valor.zero_grad()
+                        perdida_val.backward()
+                        torch.nn.utils.clip_grad_norm_(red.valor.parameters(), 0.5)
+                        optimizador_valor.step()
+                        continue
                     logits, v = red(b_est[idx], b_mas[idx])
                     logp_todas = torch.log_softmax(logits, dim=-1)
                     logp = logp_todas.gather(1, b_acc[idx].unsqueeze(1)).squeeze(1)
@@ -413,6 +448,7 @@ def main(argv: list[str] | None = None) -> int:
                         "minutos": round(guardian.minutos(), 2),
                         "promedio": round(statistics.fmean(totales_recientes), 1),
                         **({"peso_pista": round(peso, 4)} if pista else {}),
+                        **({"calentando": True} if solo_valor else {}),
                     }
                 )
                 if len(curva) > MAX_PUNTOS_CURVA:

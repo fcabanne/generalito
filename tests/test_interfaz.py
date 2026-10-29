@@ -143,6 +143,7 @@ def test_modelos_con_nombre(tmp_path):
         proceso = servidor.corridas.procesos[r["nombre"]]
         assert proceso.args[proceso.args.index("--objetivo") + 1] == "superar"
         assert proceso.args[proceso.args.index("--umbral") + 1] == "900"
+        assert proceso.args[proceso.args.index("--calentamiento") + 1] == "5.0"
         assert "--oculta" not in proceso.args  # siguiendo un modelo usa su tamaño
         proceso.terminate()
         proceso.wait(timeout=30)

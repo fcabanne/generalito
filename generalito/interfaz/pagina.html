@@ -219,6 +219,11 @@
             <span class="chico gris" style="white-space:nowrap">X =</span>
             <input id="e-umbral" class="campo" type="number" value="950" min="1" max="1704" step="10" style="width:80px" disabled>
           </div>
+          <div class="fila" style="gap:6px;flex-wrap:nowrap;margin-top:4px">
+            <span class="chico gris" style="white-space:nowrap">Calentamiento</span>
+            <input id="e-calentamiento" class="campo" type="number" value="5" min="0" max="50" step="1" style="width:64px">
+            <span class="chico gris">%</span>
+          </div>
           <span class="chico gris" id="e-objetivo-ayuda">Qué se premia. "Superar X": solo 1 al final si llega a X puntos, 0 si no.</span>
         </div>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
@@ -728,7 +733,8 @@ function conectarCurvas(caja, porId) {
       cruz.setAttribute("x1", cx); cruz.setAttribute("x2", cx); cruz.classList.remove("oculto");
       const extra = cerca.supera_950_pct != null ? ` · ${cerca.supera_950_pct}% llega a 950` : "";
       const extraX = cerca.supera_umbral_pct != null ? ` · ${cerca.supera_umbral_pct}% llega a ${cerca.umbral}` : "";
-      tip.textContent = `${cerca.partidas.toLocaleString("es-AR")} partidas · ${cerca.promedio} puntos${extra}${extraX} (${cerca.tipo})`;
+      const calentando = cerca.calentando ? ", calentando" : "";
+      tip.textContent = `${cerca.partidas.toLocaleString("es-AR")} partidas · ${cerca.promedio} puntos${extra}${extraX} (${cerca.tipo}${calentando})`;
       const caja2 = histo.getBoundingClientRect();
       tip.style.left = cx / escala + (r.left - caja2.left) + "px";
       tip.style.top = ev.clientY - caja2.top - 10 + "px";
@@ -775,6 +781,7 @@ async function refrescarEntrenamientos() {
         <div>Examen actual<b>${ultimaEval ? ultimaEval.promedio : "–"}</b>puntos de promedio${ultimaEval && ultimaEval.supera_950_pct != null ? ` · ${ultimaEval.supera_950_pct}% llega a 950` : ""}</div>
         ${objetivo.tipo === "superar" ? `<div>Llega a ${objetivo.umbral}<b>${ultimaEval && ultimaEval.supera_umbral_pct != null ? ultimaEval.supera_umbral_pct + "%" : "–"}</b>en el examen</div>` : ""}
         <div>Mejor examen<b>${e.mejor_evaluacion == null ? "–" : e.criterio_mejor === "supera" ? e.mejor_evaluacion + "%" : e.mejor_evaluacion}</b>${e.criterio_mejor === "supera" ? `llega a ${objetivo.umbral}` : "puntos"}</div>
+        ${textoCalentamiento(e.calentamiento)}
         <div>Objetivo<b>${objetivo.tipo === "superar" ? `Superar ${objetivo.umbral}` : "Máximo puntaje"}</b>${e.supera_recientes && e.supera_recientes.pct != null ? `recientes: ${e.supera_recientes.pct}% llega a ${e.supera_recientes.umbral}` : ""}</div>
         <div>Partidas jugadas<b>${(e.partidas_totales ?? 0).toLocaleString("es-AR")}</b></div>
         <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
@@ -807,6 +814,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     lambda_gae: $("#e-lambda").value,
     oculta: $("#e-oculta").value,
     objetivo: { tipo: $("#e-objetivo").value, umbral: $("#e-umbral").value },
+    calentamiento: $("#e-calentamiento").value,
     entropia: $("#e-entropia").value,
     pista: { activa: $("#e-pista").checked, peso: $("#e-pista-peso").value, fin_pct: $("#e-pista-fin").value },
   });
@@ -850,6 +858,12 @@ async function refrescarModelos() {
     : `<p class="gris chico">Todavía no guardaste ninguno.</p>`;
 }
 
+function textoCalentamiento(c) {
+  if (!c || !c.pct) return "";
+  const estado = c.activo ? "ahora: solo recalibra el valor" : c.terminado ? "terminado" : "";
+  return `<div>Calentamiento<b>${c.pct}%</b>${estado}</div>`;
+}
+
 function textoObjetivo(o) {
   if (!o) return "–";
   return o.tipo === "superar" ? `Superar ${o.umbral}` : "Máximo puntaje";
@@ -863,10 +877,11 @@ function actualizarTamano() {
     : "Se usa el tamaño del modelo que vas a seguir (solo se elige empezando de cero).";
   // "Superar X" solo siguiendo un modelo entrenado
   if (desdeCero) $("#e-objetivo").value = "puntaje";
+  $("#e-calentamiento").disabled = desdeCero;
   $("#e-objetivo").querySelector('[value="superar"]').disabled = desdeCero;
   $("#e-objetivo-ayuda").textContent = desdeCero
     ? "Empezando de cero solo se puede “Máximo puntaje”. “Superar X” se usa siguiendo un modelo entrenado."
-    : "Qué se premia. “Superar X”: solo 1 al final si llega a X puntos, 0 si no.";
+    : "Qué se premia. “Superar X”: solo 1 al final si llega a X puntos, 0 si no. Si el objetivo cambia respecto del modelo, durante el % de calentamiento solo se recalibra la estimación de valor y la forma de jugar no se toca.";
   actualizarObjetivo();
 }
 function actualizarObjetivo() {

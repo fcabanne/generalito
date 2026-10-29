@@ -279,6 +279,12 @@ class Corridas:
             args += ["--objetivo", "superar", "--umbral", str(umbral)]
         elif objetivo_tipo != "puntaje":
             raise ValueError("Objetivo desconocido.")
+        calentamiento = pedido.get("calentamiento")
+        calentamiento = 5.0 if calentamiento in (None, "") else float(calentamiento)
+        if not 0 <= calentamiento <= 50:
+            raise ValueError("El calentamiento tiene que estar entre 0% y 50%.")
+        if desde is not None:  # solo se usa si el objetivo cambia respecto del modelo
+            args += ["--calentamiento", str(calentamiento)]
         provisoria = {
             "programa": "entrenar",
             "jugador": "agente",
@@ -290,6 +296,7 @@ class Corridas:
                 "pista_bonus": pista_bonus,
                 "pista_fin": pista_fin,
                 "oculta": oculta,
+                "calentamiento": calentamiento if desde is not None else None,
             },
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }

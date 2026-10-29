@@ -14,6 +14,22 @@ Formato:
 
 ---
 
+## 2026-10-29 · Calentamiento de la estimación de valor al cambiar de objetivo
+
+**Contexto:** al pasar de "Máximo puntaje" a "Superar X" se reinicia la salida de valor de la red. En una prueba corta, el % de partidas que llegaba a X bajó en los primeros exámenes (25% → 15% → 11%). Mientras la estimación de valor está recién reiniciada, las ventajas que guían a la política son casi ruido, y la política se mueve sin rumbo.
+
+**Decisión:**
+
+- **Calentamiento:** durante las primeras tandas (`--calentamiento`, por defecto 5% del entrenamiento) solo se recalibra la estimación de valor. La política y las capas compartidas (el tronco) no se tocan: el tronco se usa sin gradiente y solo se ajusta la última capa de valor, con su propio optimizador. Después, el entrenamiento sigue normal.
+- **Solo al cambiar de objetivo:** se activa únicamente si el objetivo es distinto al del modelo que se sigue (cuando se reinicia el valor). Si se sigue con el mismo objetivo, no hay calentamiento aunque se pida.
+- Si calienta o no se decide al empezar cada tanda, según el progreso del entrenamiento (minutos o partidas, lo que llegue primero), igual que la Pista del Bonus.
+- **Interfaz:** en Entrenar, el campo "Calentamiento (%)" junto al Objetivo, habilitado solo siguiendo un modelo. La tarjeta muestra el % y si está activo ("ahora: solo recalibra el valor") o terminado, y la curva marca las tandas de calentamiento en el tooltip. Queda en `config.json` (`calentamiento_pct`, 0 si no aplicó) y en el snapshot (`entrenamiento.calentamiento_pct`).
+- **No es una pista:** no cambia la recompensa ni le dice nada de cómo jugar. Solo ordena el aprendizaje: primero aprende a estimar, después a decidir.
+
+**Test:** con un cambio de objetivo y el calentamiento cubriendo todo el entrenamiento, todos los pesos de la política y del tronco quedan idénticos y solo cambian los de la salida de valor. Siguiendo con el mismo objetivo no hay calentamiento y la política sí cambia.
+
+---
+
 ## 2026-10-29 · Objetivo "Superar X puntos" (otro objetivo, no una pista)
 
 **Contexto:** todos los modelos se estancan cerca de 850 con la misma estrategia: el Bonus casi solo en Desordenada. Facu cree que maximizar el promedio lo lleva a jugar seguro, y quiere probar otro objetivo sin enseñarle cómo jugar.
