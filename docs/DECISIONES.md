@@ -14,6 +14,24 @@ Formato:
 
 ---
 
+## 2026-10-29 · Objetivo "Superar X puntos" (otro objetivo, no una pista)
+
+**Contexto:** todos los modelos se estancan cerca de 850 con la misma estrategia: el Bonus casi solo en Desordenada. Facu cree que maximizar el promedio lo lleva a jugar seguro, y quiere probar otro objetivo sin enseñarle cómo jugar.
+
+**Decisión:**
+
+- En Entrenar, "Objetivo": "Máximo puntaje" (como hasta ahora: los puntos de cada anotación) o "Superar X puntos" (X configurable, 950 por defecto). Línea de comandos: `--objetivo puntaje|superar` y `--umbral X`.
+- **Con "Superar X", la recompensa es solo al final:** 1 si el total llega a X (total ≥ X) y 0 si no. Nada en el medio de la partida.
+- **No es una pista ni *reward shaping*:** cambia qué se optimiza (la probabilidad de llegar a X en vez del promedio) y no sugiere cómo jugar. Es parecido a la recompensa ganar/perder de la v2, contra un rival fijo que siempre hace X puntos. La Pista del Bonus sigue siendo la única excepción de la regla 7, y no se combina con este objetivo: la pista está en puntos y este objetivo no.
+- **Solo siguiendo un modelo entrenado**, no desde cero: con una sola señal de 0/1 al final, un modelo que juega al azar casi nunca llegaría a X y no tendría de qué aprender. La interfaz no lo ofrece empezando de cero y el entrenamiento lo rechaza sin `--desde`.
+- **Estimación de valor reiniciada:** si el objetivo cambia respecto del modelo que se sigue, se reinicia solo la salida de valor de la red, que estimaba otra cosa (puntos que faltan o la chance de otro X). La política, lo que sabe jugar, se conserva. Queda anotado en `config.json` (`valor_reiniciado`).
+- **El mejor modelo se elige por lo que se optimiza:** con "Superar X", `mejor.pt` es el de mayor % de partidas que llegan a X en el examen, no el de mejor promedio. Cada examen marca cuál fue elegido (`mejor`), y "Mis modelos" muestra ese examen.
+- **Medición:** todos los exámenes informan el % de partidas que llegan a 950, y con "Superar X" también el % que llega a X. Análisis muestra lo mismo: 950 siempre, más el X de cada modelo que se entrenó con ese objetivo, y en Comparar, para los dos modelos. El modelo guarda su objetivo en `entrenamiento.objetivo`.
+
+**Consecuencias:** el promedio puede bajar aunque el modelo mejore en lo que se le pide. Para comparar contra un modelo de "Máximo puntaje", mirar el % que llega a X con los mismos dados (Comparar en Análisis).
+
+---
+
 ## 2026-10-29 · Tamaño de la red configurable (solo desde cero)
 
 **Contexto:** todos los entrenamientos se estancan cerca de 850 puntos, sin importar horizonte, exploración ni pista. Facu quiere probar si el límite es la capacidad de la red.

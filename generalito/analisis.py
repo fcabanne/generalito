@@ -71,7 +71,16 @@ def main(argv: list[str] | None = None) -> int:
         "limites": limites.como_dict(),
     }
     (carpeta / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
-    redes = [cargar_snapshot(m)[0] for m in args.modelo]
+    cargados = [cargar_snapshot(m) for m in args.modelo]
+    redes = [red for red, _ in cargados]
+    # Umbrales a informar: 950 siempre, más el X de cada modelo entrenado para superarlo
+    from generalito.evaluar import UMBRAL_REFERENCIA, porcentaje_que_supera
+
+    umbrales = [UMBRAL_REFERENCIA]
+    for _, metricas in cargados:
+        objetivo = (metricas or {}).get("entrenamiento", {}).get("objetivo") or {}
+        if objetivo.get("tipo") == "superar" and objetivo.get("umbral") not in umbrales:
+            umbrales.append(objetivo["umbral"])
     guardian = Guardian(limites, carpeta)
 
     def escribir(estado: dict) -> None:
@@ -206,6 +215,9 @@ def main(argv: list[str] | None = None) -> int:
                 "tiro_al_anotar": [tiro_al_anotar[t] for t in (1, 2, 3)],
                 "dados_guardados": [guardados[g] for g in range(5)],
                 "servida_con_puntaje_pct": round(100 * servida_con_puntaje / (n * 13), 1),
+                "supera": [
+                    {"umbral": u, "pct": porcentaje_que_supera(totales, u)} for u in umbrales
+                ],
             }
         else:
             juegos_a, _, distintas = jugar(redes[0], redes[1], progreso(f"Juega {nombres[0]}"))
@@ -239,6 +251,13 @@ def main(argv: list[str] | None = None) -> int:
                 "promedios": [round(statistics.fmean(ta), 1), round(statistics.fmean(tb), 1)],
                 "victorias": [gana_a, len(ta) - gana_a - gana_b, gana_b],
                 "diferencia_media": round(statistics.fmean(ta) - statistics.fmean(tb), 1),
+                "supera": [
+                    {
+                        "umbral": u,
+                        "pct": [porcentaje_que_supera(ta, u), porcentaje_que_supera(tb, u)],
+                    }
+                    for u in umbrales
+                ],
                 "histogramas": [_histograma(ta), _histograma(tb)],
                 "decisiones_distintas": len(distintas),
                 "distintas_por_partida": round(len(distintas) / len(ta), 1),

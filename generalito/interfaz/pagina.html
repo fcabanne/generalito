@@ -212,6 +212,15 @@
           <span class="chico gris">Excepción controlada: adelanta el valor de acercarse a 60 en los números y lo descuenta al final (no cambia el puntaje). Peso inicial, que baja a 0 en ese % del entrenamiento.</span>
         </div>
         <label>Tamaño de la red<select id="e-oculta"><option value="256">256 (la de siempre)</option><option value="512">512</option><option value="1024">1024</option></select><span id="e-oculta-ayuda">Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento.</span></label>
+        <div class="pista-campo">
+          <span>Objetivo</span>
+          <div class="fila" style="gap:6px;flex-wrap:nowrap">
+            <select id="e-objetivo"><option value="puntaje">Máximo puntaje</option><option value="superar">Superar X puntos</option></select>
+            <span class="chico gris">X =</span>
+            <input id="e-umbral" class="campo" type="number" value="950" min="1" max="1704" step="10" style="width:80px" disabled>
+          </div>
+          <span class="chico gris" id="e-objetivo-ayuda">Qué se premia. "Superar X": solo 1 al final si llega a X puntos, 0 si no.</span>
+        </div>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
@@ -717,7 +726,9 @@ function conectarCurvas(caja, porId) {
       const cerca = puntos.reduce((a, b) => (Math.abs(b.partidas - v) < Math.abs(a.partidas - v) ? b : a));
       const cx = 40 + ((cerca.partidas - xMin) / (xMax - xMin)) * (700 - 40 - CURVA_DER);
       cruz.setAttribute("x1", cx); cruz.setAttribute("x2", cx); cruz.classList.remove("oculto");
-      tip.textContent = `${cerca.partidas.toLocaleString("es-AR")} partidas · ${cerca.promedio} puntos (${cerca.tipo})`;
+      const extra = cerca.supera_950_pct != null ? ` · ${cerca.supera_950_pct}% llega a 950` : "";
+      const extraX = cerca.supera_umbral_pct != null ? ` · ${cerca.supera_umbral_pct}% llega a ${cerca.umbral}` : "";
+      tip.textContent = `${cerca.partidas.toLocaleString("es-AR")} partidas · ${cerca.promedio} puntos${extra}${extraX} (${cerca.tipo})`;
       const caja2 = histo.getBoundingClientRect();
       tip.style.left = cx / escala + (r.left - caja2.left) + "px";
       tip.style.top = ev.clientY - caja2.top - 10 + "px";
@@ -750,6 +761,7 @@ async function refrescarEntrenamientos() {
     const fecha = c.nombre.slice(0, 15).replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, "$3/$2/$1 $4:$5");
     const r = e.recursos || {};
     const ultimaEval = (e.evaluaciones || []).slice(-1)[0];
+    const objetivo = c.config.objetivo || { tipo: "puntaje" };
     const estadoTxt = c.situacion === "corriendo" && !e.curva ? "Preparando…" : (e.pausa && c.situacion === "corriendo" ? "En pausa" : NOMBRE_SITUACION[c.situacion]);
     return `<div class="tarjeta">
       <div class="corrida-cab">
@@ -760,8 +772,10 @@ async function refrescarEntrenamientos() {
         </div>
       </div>
       <div class="cifras" style="margin-top:10px">
-        <div>Examen actual<b>${ultimaEval ? ultimaEval.promedio : "–"}</b>puntos de promedio</div>
-        <div>Mejor examen<b>${e.mejor_evaluacion ?? "–"}</b></div>
+        <div>Examen actual<b>${ultimaEval ? ultimaEval.promedio : "–"}</b>puntos de promedio${ultimaEval && ultimaEval.supera_950_pct != null ? ` · ${ultimaEval.supera_950_pct}% llega a 950` : ""}</div>
+        ${objetivo.tipo === "superar" ? `<div>Llega a ${objetivo.umbral}<b>${ultimaEval && ultimaEval.supera_umbral_pct != null ? ultimaEval.supera_umbral_pct + "%" : "–"}</b>en el examen</div>` : ""}
+        <div>Mejor examen<b>${e.mejor_evaluacion == null ? "–" : e.criterio_mejor === "supera" ? e.mejor_evaluacion + "%" : e.mejor_evaluacion}</b>${e.criterio_mejor === "supera" ? `llega a ${objetivo.umbral}` : "puntos"}</div>
+        <div>Objetivo<b>${objetivo.tipo === "superar" ? `Superar ${objetivo.umbral}` : "Máximo puntaje"}</b>${e.supera_recientes && e.supera_recientes.pct != null ? `recientes: ${e.supera_recientes.pct}% llega a ${e.supera_recientes.umbral}` : ""}</div>
         <div>Partidas jugadas<b>${(e.partidas_totales ?? 0).toLocaleString("es-AR")}</b></div>
         <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
         <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
@@ -792,6 +806,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     desde: $("#e-desde").value,
     lambda_gae: $("#e-lambda").value,
     oculta: $("#e-oculta").value,
+    objetivo: { tipo: $("#e-objetivo").value, umbral: $("#e-umbral").value },
     entropia: $("#e-entropia").value,
     pista: { activa: $("#e-pista").checked, peso: $("#e-pista-peso").value, fin_pct: $("#e-pista-fin").value },
   });
@@ -830,9 +845,14 @@ async function refrescarModelos() {
   j.value = r.activo;
   const guardados = r.modelos.filter((m) => m.clave !== "ultimo");
   $("#lista-modelos").innerHTML = guardados.length
-    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Red</th><th>Pista del Bonus</th><th>Guardado</th></tr>` +
-      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${(m.entrenamiento && m.entrenamiento.oculta) || "–"}</td><td>${(m.pistas && m.pistas.length) ? m.pistas.map((p) => `${p.peso_inicial} → 0 al ${p.fin_pct}%`).join(", ") : "no"}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
+    ? `<div class="scroll"><table class="historial"><tr><th>Nombre</th><th>Examen</th><th>Partidas entrenadas</th><th>Llega a 950</th><th>Objetivo</th><th>Red</th><th>Pista del Bonus</th><th>Guardado</th></tr>` +
+      guardados.map((m) => `<tr><td><b>${m.nombre}</b></td><td>${m.promedio ?? "–"} pts</td><td>${(m.partidas ?? 0).toLocaleString("es-AR")}</td><td>${m.supera_950_pct != null ? m.supera_950_pct + "%" : "–"}</td><td>${textoObjetivo(m.entrenamiento && m.entrenamiento.objetivo)}</td><td>${(m.entrenamiento && m.entrenamiento.oculta) || "–"}</td><td>${(m.pistas && m.pistas.length) ? m.pistas.map((p) => `${p.peso_inicial} → 0 al ${p.fin_pct}%`).join(", ") : "no"}</td><td>${(m.fecha || "").replace("T", " ").slice(0, 16)}</td></tr>`).join("") + "</table></div>"
     : `<p class="gris chico">Todavía no guardaste ninguno.</p>`;
+}
+
+function textoObjetivo(o) {
+  if (!o) return "–";
+  return o.tipo === "superar" ? `Superar ${o.umbral}` : "Máximo puntaje";
 }
 
 function actualizarTamano() {
@@ -841,8 +861,24 @@ function actualizarTamano() {
   $("#e-oculta-ayuda").textContent = desdeCero
     ? "Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento."
     : "Se usa el tamaño del modelo que vas a seguir (solo se elige empezando de cero).";
+  // "Superar X" solo siguiendo un modelo entrenado
+  if (desdeCero) $("#e-objetivo").value = "puntaje";
+  $("#e-objetivo").querySelector('[value="superar"]').disabled = desdeCero;
+  $("#e-objetivo-ayuda").textContent = desdeCero
+    ? "Empezando de cero solo se puede “Máximo puntaje”. “Superar X” se usa siguiendo un modelo entrenado."
+    : "Qué se premia. “Superar X”: solo 1 al final si llega a X puntos, 0 si no.";
+  actualizarObjetivo();
+}
+function actualizarObjetivo() {
+  const superar = $("#e-objetivo").value === "superar";
+  $("#e-umbral").disabled = !superar;
+  // La pista del Bonus no se combina con "Superar X"
+  if (superar) $("#e-pista").checked = false;
+  $("#e-pista").disabled = superar;
+  for (const id of ["#e-pista-peso", "#e-pista-fin"]) $(id).disabled = !$("#e-pista").checked;
 }
 $("#e-desde").addEventListener("change", actualizarTamano);
+$("#e-objetivo").addEventListener("change", actualizarObjetivo);
 
 $("#e-pista").addEventListener("change", () => {
   for (const id of ["#e-pista-peso", "#e-pista-fin"]) $(id).disabled = !$("#e-pista").checked;
@@ -938,7 +974,8 @@ function tarjetaAnalisis(c) {
     html += `<div class="cifras" style="margin-top:10px">
       <div>Promedio<b>${r.promedio}</b>puntos</div><div>Variación típica<b>±${r.desvio}</b></div>
       <div>Mejor partida<b>${r.maximo}</b></div><div>Peor partida<b>${r.minimo}</b></div>
-      <div>Anota puntos en Servida<b>${r.servida_con_puntaje_pct}%</b>de sus casillas</div></div>`;
+      <div>Anota puntos en Servida<b>${r.servida_con_puntaje_pct}%</b>de sus casillas</div>
+      ${(r.supera || []).map((u) => `<div>Llega a ${u.umbral}<b>${u.pct}%</b>de las partidas</div>`).join("")}</div>`;
     html += mapaDeCalor(r, c.nombre);
     if (r.tachada_por_tiro) html += tachadasPorTiro(r);
     html += `<div class="dos-col"><div>` +
@@ -955,7 +992,8 @@ function tarjetaAnalisis(c) {
       <div>Empatan<b>${pct(em)}%</b></div>
       <div>Gana ${b}<b>${pct(gb)}%</b>${gb.toLocaleString("es-AR")} partidas</div>
       <div>Promedios<b>${r.promedios[0]} / ${r.promedios[1]}</b>diferencia ${r.diferencia_media > 0 ? "+" : ""}${r.diferencia_media}</div>
-      <div>Deciden distinto<b>${r.distintas_por_partida}</b>veces por partida</div></div>
+      <div>Deciden distinto<b>${r.distintas_por_partida}</b>veces por partida</div>
+      ${(r.supera || []).map((u) => `<div>Llegan a ${u.umbral}<b>${u.pct[0]}% / ${u.pct[1]}%</b>${a} / ${b}</div>`).join("")}</div>
       <div class="apilada" role="img" aria-label="Partidas ganadas">
         <div title="Gana ${a}: ${pct(ga)}%" style="flex:${ga};background:var(--serie-1)"></div>
         <div title="Empate: ${pct(em)}%" style="flex:${em};background:var(--texto-3)"></div>

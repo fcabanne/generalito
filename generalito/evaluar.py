@@ -14,6 +14,12 @@ from generalito.motor import FuenteReservada, Partida
 from generalito.motor.jugadas import decodificar
 
 SEMILLA_EVALUACION = 20261026
+UMBRAL_REFERENCIA = 950  # nivel de la familia: siempre se informa el % de partidas que lo superan
+
+
+def porcentaje_que_supera(totales: list[int], umbral: int) -> float:
+    """% de partidas cuyo total llega al umbral (total >= umbral)."""
+    return round(100 * sum(t >= umbral for t in totales) / max(1, len(totales)), 1)
 
 
 def jugada_azar(partida: Partida, rng: random.Random) -> int:

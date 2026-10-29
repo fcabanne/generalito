@@ -58,6 +58,14 @@ def _argumentos(argv):
         default=256,
         help="tamaño de la red (neuronas por capa); con --desde se usa el del modelo",
     )
+    # Objetivo: qué se premia (ver DECISIONES.md, 2026-10-29)
+    p.add_argument(
+        "--objetivo",
+        choices=["puntaje", "superar"],
+        default="puntaje",
+        help="puntaje: puntos por anotación; superar: 1 al final si el total llega a --umbral",
+    )
+    p.add_argument("--umbral", type=int, default=950, help="X del objetivo 'superar'")
     # Pista del Bonus: excepción controlada a "sin reward shaping" (ver pista.py)
     p.add_argument(
         "--pista-bonus",
@@ -82,6 +90,13 @@ def _argumentos(argv):
 
 def main(argv: list[str] | None = None) -> int:
     args = _argumentos(argv)
+    if args.objetivo == "superar":
+        if args.desde is None:
+            raise SystemExit("El objetivo 'superar' solo se usa siguiendo un modelo (--desde)")
+        if args.pista_bonus > 0:
+            raise SystemExit("La pista del Bonus no se combina con el objetivo 'superar'")
+        if not 1 <= args.umbral <= 1704:
+            raise SystemExit("El umbral tiene que estar entre 1 y 1704")
     limites = Limites(
         max_partidas=args.max_partidas,
         max_minutos=args.minutos,
@@ -100,7 +115,12 @@ def main(argv: list[str] | None = None) -> int:
     from generalito.agente.entornos import Entornos
     from generalito.agente.pista import peso_actual
     from generalito.agente.red import Red, cargar_snapshot, guardar_snapshot
-    from generalito.evaluar import evaluar_agente, evaluar_jugador
+    from generalito.evaluar import (
+        UMBRAL_REFERENCIA,
+        evaluar_agente,
+        evaluar_jugador,
+        porcentaje_que_supera,
+    )
     from generalito.motor import CANTIDAD_JUGADAS, VERSION_REGLAS
 
     trabajadores = args.trabajadores or max(1, limites.hilos_cpu - 1)
@@ -125,6 +145,19 @@ def main(argv: list[str] | None = None) -> int:
     else:
         red = Red(args.oculta)
 
+    # --- Objetivo ---
+    objetivo = {"tipo": "puntaje"}
+    if args.objetivo == "superar":
+        objetivo = {"tipo": "superar", "umbral": args.umbral}
+    objetivo_previo = metricas_previas.get("entrenamiento", {}).get("objetivo", {"tipo": "puntaje"})
+    valor_reiniciado = False
+    if args.desde and objetivo_previo != objetivo:
+        # La salida de valor estimaba otra cosa (puntos que faltan, o la chance de
+        # superar otro X): se reinicia. La política, lo que sabe jugar, se conserva.
+        red.valor.reset_parameters()
+        valor_reiniciado = True
+        print(f"Objetivo nuevo {objetivo}: se reinicia la estimación de valor", flush=True)
+
     carpeta = args.carpeta or Path("corridas") / datetime.now().strftime("%Y%m%d-%H%M%S-entrenar")
     carpeta.mkdir(parents=True, exist_ok=True)
     config = {
@@ -132,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         "jugador": "agente",
         "algoritmo": "PPO",
         "desde": str(args.desde) if args.desde else None,
+        "objetivo": objetivo,
+        "valor_reiniciado": valor_reiniciado,
         "trabajadores": trabajadores,
         "version_reglas": VERSION_REGLAS,
         "version_codificacion": VERSION_CODIFICACION,
@@ -188,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
         max_mb=limites.max_disco_mb,
         min_libre_gb=limites.min_disco_libre_gb,
         peso_pista=pista["peso_inicial"] if pista else 0.0,
+        umbral=objetivo.get("umbral"),
     )
 
     estados = np.zeros((t_max + 1, n, TAMANO_ESTADO), dtype=np.float32)
@@ -205,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
     curva: list[dict] = []
     evaluaciones: list[dict] = []
     mejor_eval = -1.0
+    criterio = "supera" if objetivo["tipo"] == "superar" else "promedio"
+    umbral_seguido = objetivo.get("umbral", UMBRAL_REFERENCIA)
     ultima_eval = time.monotonic()
     ultimo_reporte = 0.0
     motivo = None
@@ -219,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
                 "lambda_gae": args.lambda_gae,
                 "entropia": args.entropia,
                 "oculta": red.oculta,
+                "objetivo": objetivo,
                 "pista": pista,
             },
             "pistas": pistas,
@@ -248,6 +287,14 @@ def main(argv: list[str] | None = None) -> int:
                 "lambda_gae": args.lambda_gae,
                 "entropia": args.entropia,
                 "oculta": red.oculta,
+                "objetivo": objetivo,
+            },
+            "criterio_mejor": criterio,
+            "supera_recientes": {
+                "umbral": umbral_seguido,
+                "pct": porcentaje_que_supera(list(totales_recientes), umbral_seguido)
+                if totales_recientes
+                else None,
             },
             "recursos": guardian.medir() if final else guardian.ultima_medicion or guardian.medir(),
         }
@@ -256,20 +303,31 @@ def main(argv: list[str] | None = None) -> int:
     def evaluar() -> None:
         nonlocal mejor_eval
         red.eval()
-        promedio = round(statistics.fmean(evaluar_agente(red, PARTIDAS_EVALUACION)), 1)
-        evaluaciones.append(
-            {
-                "partidas": partidas_previas + partidas_terminadas,
-                "minutos": round(guardian.minutos(), 2),
-                "promedio": promedio,
-            }
-        )
+        totales = evaluar_agente(red, PARTIDAS_EVALUACION)
+        examen = {
+            "partidas": partidas_previas + partidas_terminadas,
+            "minutos": round(guardian.minutos(), 2),
+            "promedio": round(statistics.fmean(totales), 1),
+            "supera_950_pct": porcentaje_que_supera(totales, UMBRAL_REFERENCIA),
+        }
+        if objetivo["tipo"] == "superar":
+            examen["umbral"] = objetivo["umbral"]
+            examen["supera_umbral_pct"] = porcentaje_que_supera(totales, objetivo["umbral"])
+        # El mejor modelo se elige por lo que se está optimizando
+        valor = examen["supera_umbral_pct"] if criterio == "supera" else examen["promedio"]
+        examen["mejor"] = valor > mejor_eval
+        evaluaciones.append(examen)
         guardar_snapshot(red, carpeta / "modelo.pt", metricas())
-        if promedio > mejor_eval:
-            mejor_eval = promedio
+        if examen["mejor"]:
+            mejor_eval = valor
             guardar_snapshot(red, carpeta / "mejor.pt", metricas())
+        extra = ""
+        if criterio == "supera":
+            extra = f" · {examen['supera_umbral_pct']}% llega a {objetivo['umbral']}"
         print(
-            f"Examen: {promedio} puntos de promedio en {PARTIDAS_EVALUACION} partidas", flush=True
+            f"Examen: {examen['promedio']} puntos de promedio, "
+            f"{examen['supera_950_pct']}% llega a {UMBRAL_REFERENCIA}{extra}",
+            flush=True,
         )
 
     guardian.al_pausar = lambda: escribir_estado(final=False)

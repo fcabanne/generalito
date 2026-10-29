@@ -131,6 +131,21 @@ def test_modelos_con_nombre(tmp_path):
             time.sleep(0.2)
         assert c["config"]["programa"] == "analizar"
         assert c["estado"]["resultado"]["partidas"] == 20
+
+        # "Superar X" siguiendo un modelo guardado; no se combina con la pista
+        objetivo = {"tipo": "superar", "umbral": 900}
+        pedido = {"minutos": 1, "desde": "modelo-v1", "objetivo": objetivo}
+        con_pista = {**pedido, "pista": {"activa": True, "peso": 0.5, "fin_pct": 50}}
+        codigo, _ = pedir(url, "/api/entrenamientos", con_pista)
+        assert codigo == 400
+        codigo, r = pedir(url, "/api/entrenamientos", pedido)
+        assert codigo == 200
+        proceso = servidor.corridas.procesos[r["nombre"]]
+        assert proceso.args[proceso.args.index("--objetivo") + 1] == "superar"
+        assert proceso.args[proceso.args.index("--umbral") + 1] == "900"
+        assert "--oculta" not in proceso.args  # siguiendo un modelo usa su tamaño
+        proceso.terminate()
+        proceso.wait(timeout=30)
     finally:
         servidor.shutdown()
         servidor.server_close()
@@ -152,6 +167,9 @@ def test_entrenar_con_horizonte(tmp_path):
         pista = {"activa": True, "peso": 0.5, "fin_pct": 40}
         codigo, _ = pedir(url, "/api/entrenamientos", {"minutos": 1, "oculta": 300})
         assert codigo == 400
+        superar = {"minutos": 1, "objetivo": {"tipo": "superar", "umbral": 900}}
+        codigo, error = pedir(url, "/api/entrenamientos", superar)  # desde cero: no
+        assert codigo == 400 and "siguiendo un modelo" in error["error"]
         pedido = {
             "minutos": 1,
             "lambda_gae": 0.99,

@@ -21,6 +21,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
   - agente PPO (`generalito/agente/`), con examen periódico contra jugadores de referencia (azar y codicioso);
   - modelos con nombre desde la interfaz (`modelos/`);
   - pestaña Análisis: qué aprendió un modelo (mapas de calor y estadísticas) y comparación de dos modelos.
+  - opciones de entrenamiento: horizonte, exploración, tamaño de la red, Pista del Bonus y objetivo ("Máximo puntaje" o "Superar X", este último solo siguiendo un modelo).
 - **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
 - **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos. Para el análisis prefiere datos (gráficos, estadísticas, mapas de calor), no textos generados ni nada que use APIs de AI.
 

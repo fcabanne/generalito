@@ -263,10 +263,27 @@ class Corridas:
             if oculta not in TAMANOS_RED:
                 raise ValueError("El tamaño de la red tiene que ser 256, 512 o 1024")
             args += ["--oculta", str(oculta)]
+        objetivo = pedido.get("objetivo") or {}
+        objetivo_tipo = objetivo.get("tipo", "puntaje")
+        umbral = None
+        if objetivo_tipo == "superar":
+            if desde is None:
+                raise ValueError(
+                    "El objetivo 'Superar X puntos' solo se usa siguiendo un modelo entrenado."
+                )
+            if pista_bonus > 0:
+                raise ValueError("La pista del Bonus no se combina con 'Superar X puntos'.")
+            umbral = int(float(objetivo.get("umbral") or 950))
+            if not 1 <= umbral <= 1704:
+                raise ValueError("X tiene que estar entre 1 y 1704 puntos.")
+            args += ["--objetivo", "superar", "--umbral", str(umbral)]
+        elif objetivo_tipo != "puntaje":
+            raise ValueError("Objetivo desconocido.")
         provisoria = {
             "programa": "entrenar",
             "jugador": "agente",
             "desde": desde,
+            "objetivo": {"tipo": objetivo_tipo, **({"umbral": umbral} if umbral else {})},
             "parametros": {
                 "lambda_gae": lambda_gae,
                 "entropia": entropia,
@@ -313,13 +330,20 @@ class Corridas:
                 continue
             estado = _leer_json(ruta / "estado.json") or {}
             evaluaciones = estado.get("evaluaciones") or [{}]
-            mejor = max(evaluaciones, key=lambda e: e.get("promedio", -1))
+            # El examen del modelo guardado como mejor.pt (en entrenamientos viejos, el de
+            # mejor promedio: entonces era el criterio)
+            marcados = [e for e in evaluaciones if e.get("mejor")]
+            if marcados:
+                mejor = marcados[-1]
+            else:
+                mejor = max(evaluaciones, key=lambda e: e.get("promedio", -1))
             return {
                 "clave": "ultimo",
                 "nombre": "Último entrenado",
                 "ruta": str(modelo),
                 "promedio": mejor.get("promedio"),
                 "partidas": mejor.get("partidas"),
+                "supera_950_pct": mejor.get("supera_950_pct"),
                 "corrida": ruta.name,
             }
         return None
@@ -406,6 +430,7 @@ class Catalogo:
             "nombre": nombre,
             "promedio": ultimo["promedio"],
             "partidas": ultimo["partidas"],
+            "supera_950_pct": ultimo.get("supera_950_pct"),
             "fecha": datetime.now().isoformat(timespec="seconds"),
             "origen": ultimo["corrida"],
             # cómo se entrenó (el último entrenamiento) y las pistas de todo su linaje
