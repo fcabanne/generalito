@@ -22,6 +22,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
   - modelos con nombre desde la interfaz (`modelos/`);
   - pestaña Análisis: qué aprendió un modelo (mapas de calor y estadísticas) y comparación de dos modelos.
   - opciones de entrenamiento: horizonte, exploración, tamaño de la red, Pista del Bonus y objetivo ("Máximo puntaje", "Puntos + premio si llega a X" o "Superar X", este último solo siguiendo un modelo) y calentamiento del valor al cambiar de objetivo.
+  - "Pensar el turno" (fase 1, solo para jugar y evaluar): en Análisis, Comparar, Jugar y como examen opcional del entrenamiento.
 - **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
 - **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos. Para el análisis prefiere datos (gráficos, estadísticas, mapas de calor), no textos generados ni nada que use APIs de AI.
 
@@ -95,6 +96,7 @@ generalito/
     entrenar.py         comando generalito-entrenar (PPO)
     entornos.py         partidas en paralelo (varios procesos) y recompensa por paso
     pista.py            Pista del Bonus (única excepción de shaping, apagada por defecto)
+    pensar.py           pensar el turno: expectimax exacto del turno + valor de la red (solo para jugar/evaluar)
   interfaz/             interfaz local en el navegador (comando generalito)
     servidor.py         servidor HTTP de la biblioteca estándar, solo en 127.0.0.1
     pagina.html         la página: HTML + JS sin librerías ni internet

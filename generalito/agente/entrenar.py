@@ -36,6 +36,13 @@ def _argumentos(argv):
     p.add_argument("--carpeta", type=Path, default=None)
     p.add_argument("--semilla", type=int, default=0)
     p.add_argument("--evaluar-cada-min", type=float, default=10)
+    p.add_argument(
+        "--examen-pensando",
+        type=int,
+        default=0,
+        help="en cada examen, jugar además estas partidas pensando el turno (0 = no)",
+    )
+    p.add_argument("--muestras", type=int, default=32, help="tiradas para promediar al pensar")
     p.add_argument("--registrar-cada", type=int, default=1000, help="0 = no registrar")
     # PPO
     p.add_argument("--entornos", type=int, default=256, help="partidas jugadas en paralelo")
@@ -126,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     from generalito.agente.pista import peso_actual
     from generalito.agente.red import Red, cargar_snapshot, guardar_snapshot
     from generalito.evaluar import (
+        SEMILLA_EVALUACION,
         UMBRAL_REFERENCIA,
         evaluar_agente,
         evaluar_jugador,
@@ -339,6 +347,23 @@ def main(argv: list[str] | None = None) -> int:
         }
         (carpeta / "estado.json").write_text(json.dumps(estado), encoding="utf-8")
 
+    def examen_pensando(totales_sin_pensar: list[int]) -> dict:
+        """Las primeras N partidas del examen, pensando el turno (en varios procesos; los
+        trabajadores del entrenamiento esperan mientras tanto)."""
+        from generalito.agente.pensar import jugar_en_paralelo
+
+        n = min(args.examen_pensando, PARTIDAS_EVALUACION)
+        spec = {"ruta": str(carpeta / "modelo.pt"), "pensar": True, "muestras": args.muestras}
+        resultados = jugar_en_paralelo(spec, None, n, SEMILLA_EVALUACION, limites.hilos_cpu)
+        pensando = [r["total"] for r in resultados]
+        return {
+            "partidas": n,
+            "promedio": round(statistics.fmean(pensando), 1),
+            "supera_950_pct": porcentaje_que_supera(pensando, UMBRAL_REFERENCIA),
+            "sin_pensar_mismas": round(statistics.fmean(totales_sin_pensar[:n]), 1),
+            "segundos_por_partida": round(statistics.fmean(r["segundos"] for r in resultados), 3),
+        }
+
     def evaluar() -> None:
         nonlocal mejor_eval
         red.eval()
@@ -365,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
         examen["mejor"] = valor > mejor_eval
         evaluaciones.append(examen)
         guardar_snapshot(red, carpeta / "modelo.pt", metricas())
+        if args.examen_pensando > 0:
+            examen["pensando"] = examen_pensando(totales)
         if examen["mejor"]:
             mejor_eval = valor
             guardar_snapshot(red, carpeta / "mejor.pt", metricas())
@@ -373,6 +400,8 @@ def main(argv: list[str] | None = None) -> int:
             extra = f" · {examen['supera_umbral_pct']}% llega a {objetivo['umbral']}"
         if criterio == "mixto":
             extra += f" · {examen['puntaje_mixto']} con premio"
+        if "pensando" in examen:
+            extra += f" · pensando: {examen['pensando']['promedio']}"
         print(
             f"Examen: {examen['promedio']} puntos de promedio, "
             f"{examen['supera_950_pct']}% llega a {UMBRAL_REFERENCIA}{extra}",

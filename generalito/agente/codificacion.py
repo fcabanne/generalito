@@ -40,3 +40,30 @@ def codificar(partida: Partida, destino: np.ndarray | None = None) -> np.ndarray
     planilla[:, 2] = np.maximum(casillas, 0) / 80.0
     x[_TURNO] = partida.turno / 52.0
     return x
+
+
+def codificar_lote(
+    casillas: np.ndarray, dados: np.ndarray, tiro: int, servido: bool, turno: int
+) -> np.ndarray:
+    """Todas las combinaciones de L planillas × K tiradas, igual que `codificar`.
+
+    `casillas` es (L, 52) y `dados` es (K, 5). Devuelve (L, K, TAMANO_ESTADO).
+    Lo usa "pensar el turno" para evaluar muchas planillas posibles de una vez.
+    """
+    casillas = np.asarray(casillas, dtype=np.float32)
+    dados = np.asarray(dados, dtype=np.int64)
+    n_l, n_k = casillas.shape[0], dados.shape[0]
+    x = np.zeros((n_l, n_k, TAMANO_ESTADO), dtype=np.float32)
+    parte_dados = np.zeros((n_k, 30), dtype=np.float32)
+    filas = np.arange(n_k)[:, None]
+    parte_dados[filas, np.arange(5)[None, :] * 6 + dados - 1] = 1.0
+    x[:, :, :30] = parte_dados[None, :, :]
+    x[:, :, _INICIO_TIRO + tiro - 1] = 1.0
+    x[:, :, _SERVIDO] = float(servido)
+    planilla = np.zeros((n_l, CANTIDAD_CASILLAS, 3), dtype=np.float32)
+    planilla[:, :, 0] = casillas == LIBRE
+    planilla[:, :, 1] = casillas == TACHADA
+    planilla[:, :, 2] = np.maximum(casillas, 0) / 80.0
+    x[:, :, _INICIO_PLANILLA:_TURNO] = planilla.reshape(n_l, 1, -1)
+    x[:, :, _TURNO] = turno / 52.0
+    return x

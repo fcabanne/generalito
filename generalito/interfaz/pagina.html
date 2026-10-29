@@ -136,6 +136,7 @@
   }
   .pista-campo { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 14px; }
   .pista-campo .chico { font-weight: 400; }
+  .formulario label.check { flex-direction: row; align-items: center; gap: 4px; font-weight: 400; font-size: 13px; }
   .formulario input {
     font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borde);
     background: var(--fondo); color: var(--texto);
@@ -229,6 +230,11 @@
             <span class="chico gris">%</span>
           </div>
           <span class="chico gris" id="e-objetivo-ayuda"></span>
+          <div class="fila" style="gap:6px;flex-wrap:nowrap;margin-top:6px">
+            <span class="chico gris" style="white-space:nowrap">Examen pensando</span>
+            <input id="e-examen-pensando" class="campo" type="number" value="0" min="0" max="500" step="50" style="width:70px">
+            <span class="chico gris">partidas (0 = no; es lento)</span>
+          </div>
         </div>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
@@ -267,7 +273,8 @@
 
         <div class="tarjeta" id="t-modelo">
           <h3>El modelo</h3>
-          <div class="fila chico" style="margin-bottom:8px">Juega: <select id="j-modelo"></select></div>
+          <div class="fila chico" style="margin-bottom:8px">Juega: <select id="j-modelo"></select>
+            <label><input type="checkbox" id="j-pensar"> Pensar el turno</label></div>
           <div id="sugerencia" class="chico"></div>
           <div class="fila" style="margin-top:8px">
             <button class="boton" data-modelo="jugada">Que haga una jugada</button>
@@ -317,13 +324,20 @@
     <div class="formulario">
       <div class="tarjeta" style="margin:0">
         <h2>Qué aprendió</h2>
-        <p class="gris chico">El modelo juega 2.000 partidas de examen y se cuenta cada decisión. Tarda alrededor de un minuto.</p>
-        <div class="fila"><select id="a-modelo"></select><button class="boton principal" id="b-analizar">Analizar</button></div>
+        <p class="gris chico">El modelo juega 2.000 partidas (500 si piensa) y se cuenta cada decisión.</p>
+        <div class="fila"><select id="a-modelo"></select>
+          <label class="check"><input type="checkbox" id="a-pensar"> Pensar el turno</label>
+          <button class="boton principal" id="b-analizar">Analizar</button>
+          <button class="boton" id="b-examen-pensando" title="Las 500 partidas fijas del examen, sin pensar y pensando">Examen: sin pensar vs pensando</button></div>
       </div>
       <div class="tarjeta" style="margin:0">
         <h2>Comparar dos modelos</h2>
         <p class="gris chico">Juegan las mismas 2.000 partidas, con los mismos dados.</p>
-        <div class="fila"><select id="c-a"></select><span class="gris">contra</span><select id="c-b"></select><button class="boton principal" id="b-comparar">Comparar</button></div>
+        <div class="fila"><select id="c-a"></select><label class="check"><input type="checkbox" id="c-a-pensar"> piensa</label>
+          <span class="gris">contra</span>
+          <select id="c-b"></select><label class="check"><input type="checkbox" id="c-b-pensar"> piensa</label>
+          <button class="boton principal" id="b-comparar">Comparar</button></div>
+        <p class="gris chico" style="margin:6px 0 0">Pensar el turno: en cada decisión prueba todas las opciones del turno con las probabilidades exactas de los dados y evalúa cómo queda la planilla con su propia red. Es mucho más lento.</p>
       </div>
     </div>
     <div id="analisis"></div>
@@ -465,25 +479,32 @@ async function pintarSugerencia() {
   const caja = $("#sugerencia");
   if (!partida) return;
   try {
-    const s = await api("GET", `/api/partidas/${partida.id}/sugerencia`);
+    const pensando = $("#j-pensar").checked;
+    if (pensando) caja.innerHTML = `<span class="gris">Pensando…</span>`;
+    const s = await api("GET", `/api/partidas/${partida.id}/sugerencia${pensando ? "?pensar=1" : ""}`);
     hayModelo = s.modelo !== undefined || s.opciones.length > 0;
     if (!hayModelo) {
       caja.innerHTML = `<span class="gris">Todavía no hay un modelo entrenado.</span>`;
     } else if (!s.opciones.length) {
       caja.innerHTML = "";
     } else {
-      caja.innerHTML = `<div class="gris" style="margin-bottom:4px">Qué haría (y qué tan seguro está):</div>` +
+      const titulo = s.pensando
+        ? `Pensando el turno (${s.segundos} s). Lo que espera ${s.unidad === "%" ? "de chance" : "de puntaje final"} con cada opción:`
+        : "Qué haría (y qué tan seguro está):";
+      caja.innerHTML = `<div class="gris" style="margin-bottom:4px">${titulo}</div>` +
         s.opciones.map((o, i) => `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
-          <span style="min-width:44px;font-weight:${i ? 400 : 700}">${Math.round(o.prob * 100)}%</span>
+          <span style="min-width:56px;font-weight:${i ? 400 : 700}">${s.pensando ? (s.unidad === "%" ? o.valor + "%" : Math.round(o.valor)) : Math.round(o.prob * 100) + "%"}</span>
           <span style="font-weight:${i ? 400 : 700}">${o.texto}</span></div>`).join("");
     }
   } catch (e) { caja.innerHTML = `<span class="gris">${e.message}</span>`; }
   document.querySelectorAll("[data-modelo]").forEach((b) => (b.disabled = partida.terminada || !hayModelo));
 }
 
+$("#j-pensar").addEventListener("change", pintarSugerencia);
+
 document.querySelectorAll("[data-modelo]").forEach((b) =>
   b.addEventListener("click", () => accion(async () =>
-    pintarPartida(await api("POST", `/api/partidas/${partida.id}/modelo`, { hasta: b.dataset.modelo }))
+    pintarPartida(await api("POST", `/api/partidas/${partida.id}/modelo`, { hasta: b.dataset.modelo, pensar: $("#j-pensar").checked }))
   ))
 );
 
@@ -787,6 +808,7 @@ async function refrescarEntrenamientos() {
         ${objetivo.tipo === "superar" || objetivo.tipo === "mixto" ? `<div>Llega a ${objetivo.umbral}<b>${ultimaEval && ultimaEval.supera_umbral_pct != null ? ultimaEval.supera_umbral_pct + "%" : "–"}</b>${ultimaEval && ultimaEval.puntaje_mixto != null ? `con premio: ${ultimaEval.puntaje_mixto}` : "en el examen"}</div>` : ""}
         <div>Mejor examen<b>${e.mejor_evaluacion == null ? "–" : e.criterio_mejor === "supera" ? e.mejor_evaluacion + "%" : e.mejor_evaluacion}</b>${e.criterio_mejor === "supera" ? `llega a ${objetivo.umbral}` : e.criterio_mejor === "mixto" ? "puntos con premio" : "puntos"}</div>
         ${textoCalentamiento(e.calentamiento)}
+        ${ultimaEval && ultimaEval.pensando ? `<div>Examen pensando<b>${ultimaEval.pensando.promedio}</b>sin pensar, mismas ${ultimaEval.pensando.partidas}: ${ultimaEval.pensando.sin_pensar_mismas} · ${segundos(ultimaEval.pensando.segundos_por_partida)}/partida</div>` : ""}
         <div>Objetivo<b>${textoObjetivo(objetivo)}</b>${e.supera_recientes && e.supera_recientes.pct != null ? `recientes: ${e.supera_recientes.pct}% llega a ${e.supera_recientes.umbral}` : ""}</div>
         <div>Partidas jugadas<b>${(e.partidas_totales ?? 0).toLocaleString("es-AR")}</b></div>
         <div>Velocidad<b>${e.partidas_por_segundo ?? "–"}</b>partidas/seg</div>
@@ -820,6 +842,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     oculta: $("#e-oculta").value,
     objetivo: { tipo: $("#e-objetivo").value, umbral: $("#e-umbral").value, premio: $("#e-premio").value },
     calentamiento: $("#e-calentamiento").value,
+    examen_pensando: $("#e-examen-pensando").value,
     entropia: $("#e-entropia").value,
     pista: { activa: $("#e-pista").checked, peso: $("#e-pista-peso").value, fin_pct: $("#e-pista-fin").value },
   });
@@ -926,6 +949,9 @@ $("#j-modelo").addEventListener("change", () => accion(async () => {
 }));
 
 // --- Análisis ---
+function segundos(x) {
+  return x < 0.1 ? `${Math.round(x * 1000)} ms` : `${x.toFixed(x < 10 ? 2 : 1)} s`;
+}
 const modoCalor = {}; // por análisis: "puntos" | "tachada" | "turno"
 const MODOS = {
   puntos: { titulo: "Puntos promedio", clave: "puntos", sufijo: "", max: null },
@@ -1003,6 +1029,7 @@ function tarjetaAnalisis(c) {
       <div>Promedio<b>${r.promedio}</b>puntos</div><div>Variación típica<b>±${r.desvio}</b></div>
       <div>Mejor partida<b>${r.maximo}</b></div><div>Peor partida<b>${r.minimo}</b></div>
       <div>Anota puntos en Servida<b>${r.servida_con_puntaje_pct}%</b>de sus casillas</div>
+      ${r.segundos_por_partida != null ? `<div>Tiempo<b>${segundos(r.segundos_por_partida)}</b>por partida${r.pensar ? " (pensando)" : ""}</div>` : ""}
       ${(r.supera || []).map((u) => `<div>Llega a ${u.umbral}<b>${u.pct}%</b>de las partidas</div>`).join("")}</div>`;
     html += mapaDeCalor(r, c.nombre);
     if (r.tachada_por_tiro) html += tachadasPorTiro(r);
@@ -1021,6 +1048,7 @@ function tarjetaAnalisis(c) {
       <div>Gana ${b}<b>${pct(gb)}%</b>${gb.toLocaleString("es-AR")} partidas</div>
       <div>Promedios<b>${r.promedios[0]} / ${r.promedios[1]}</b>diferencia ${r.diferencia_media > 0 ? "+" : ""}${r.diferencia_media}</div>
       <div>Deciden distinto<b>${r.distintas_por_partida}</b>veces por partida</div>
+      ${r.segundos_por_partida ? `<div>Tiempo por partida<b>${segundos(r.segundos_por_partida[0])} / ${segundos(r.segundos_por_partida[1])}</b>${a} / ${b}</div>` : ""}
       ${(r.supera || []).map((u) => `<div>Llegan a ${u.umbral}<b>${u.pct[0]}% / ${u.pct[1]}%</b>${a} / ${b}</div>`).join("")}</div>
       <div class="apilada" role="img" aria-label="Partidas ganadas">
         <div title="Gana ${a}: ${pct(ga)}%" style="flex:${ga};background:var(--serie-1)"></div>
@@ -1058,11 +1086,20 @@ async function refrescarAnalisis(forzar = false) {
 }
 
 $("#b-analizar").addEventListener("click", () => accion(async () => {
-  await api("POST", "/api/analisis", { tipo: "analizar", modelos: [$("#a-modelo").value] });
+  await api("POST", "/api/analisis", { tipo: "analizar", modelos: [$("#a-modelo").value], pensar: [$("#a-pensar").checked] });
+  setTimeout(refrescarAnalisis, 800);
+}));
+$("#b-examen-pensando").addEventListener("click", () => accion(async () => {
+  const m = $("#a-modelo").value;
+  await api("POST", "/api/analisis", { tipo: "comparar", modelos: [m, m], pensar: [false, true], examen: true });
   setTimeout(refrescarAnalisis, 800);
 }));
 $("#b-comparar").addEventListener("click", () => accion(async () => {
-  await api("POST", "/api/analisis", { tipo: "comparar", modelos: [$("#c-a").value, $("#c-b").value] });
+  await api("POST", "/api/analisis", {
+    tipo: "comparar",
+    modelos: [$("#c-a").value, $("#c-b").value],
+    pensar: [$("#c-a-pensar").checked, $("#c-b-pensar").checked],
+  });
   setTimeout(refrescarAnalisis, 800);
 }));
 

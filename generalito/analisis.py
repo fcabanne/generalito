@@ -6,6 +6,11 @@ cada decisión. Nada de esto se usa para entrenar.
 Uso:
     uv run python -m generalito.analisis analizar --modelo modelos/modelo-v1.pt
     uv run python -m generalito.analisis comparar --modelo a.pt --modelo b.pt
+    uv run python -m generalito.analisis comparar --modelo a.pt --modelo a.pt \
+        --pensar no --pensar si --examen --partidas 500     # examen: sin pensar vs pensando
+
+Con --pensar si, ese modelo "piensa el turno" (generalito/agente/pensar.py): mucho
+más lento, así que juega en varios procesos (--hilos).
 """
 
 import argparse
@@ -28,6 +33,16 @@ def _argumentos(argv):
     p.add_argument("--modelo", type=Path, action="append", required=True)
     p.add_argument("--nombre", action="append", default=[], help="nombre para mostrar")
     p.add_argument("--partidas", type=int, default=2000)
+    p.add_argument(
+        "--pensar",
+        action="append",
+        choices=["si", "no"],
+        default=[],
+        help="por cada --modelo, si piensa el turno (por defecto no)",
+    )
+    p.add_argument("--muestras", type=int, default=32, help="tiradas para promediar al pensar")
+    p.add_argument("--examen", action="store_true", help="usar las partidas fijas del examen")
+    p.add_argument("--hilos", type=int, default=Limites().hilos_cpu, help="núcleos al pensar")
     p.add_argument("--carpeta", type=Path, default=None)
     p.add_argument("--max-minutos", type=float, default=30)
     p.add_argument("--max-cpu", type=float, default=Limites().max_cpu_sistema)
@@ -43,7 +58,12 @@ def main(argv: list[str] | None = None) -> int:
     args = _argumentos(argv)
     if args.tipo == "comparar" and len(args.modelo) != 2:
         raise SystemExit("Para comparar hacen falta dos --modelo")
-    limites = Limites(max_minutos=args.max_minutos, hilos_cpu=1, max_cpu_sistema=args.max_cpu)
+    pensar = [p == "si" for p in args.pensar] + [False] * (len(args.modelo) - len(args.pensar))
+    limites = Limites(
+        max_minutos=args.max_minutos,
+        hilos_cpu=max(1, args.hilos) if any(pensar) else 1,
+        max_cpu_sistema=args.max_cpu,
+    )
     aplicar_limites_proceso(limites)
 
     import numpy as np
@@ -54,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     from generalito.motor import CANTIDAD_JUGADAS, FuenteReservada, Partida
     from generalito.motor.categorias import NOMBRES, Categoria
     from generalito.motor.jugadas import Anotar, decodificar
-    from generalito.motor.planilla import NOMBRES_COLUMNAS, Columna
+    from generalito.motor.planilla import NOMBRES_COLUMNAS, Columna, Planilla
 
     torch.set_num_threads(1)
     nombres = args.nombre + [m.stem for m in args.modelo[len(args.nombre) :]]
@@ -67,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
         "jugador": " vs ".join(nombres),
         "modelos": [str(m) for m in args.modelo],
         "nombres": nombres,
+        "pensar": pensar,
+        "muestras": args.muestras,
+        "examen": args.examen,
         "partidas": args.partidas,
         "limites": limites.como_dict(),
     }
@@ -74,7 +97,9 @@ def main(argv: list[str] | None = None) -> int:
     cargados = [cargar_snapshot(m) for m in args.modelo]
     redes = [red for red, _ in cargados]
     # Umbrales a informar: 950 siempre, más el X de cada modelo entrenado para superarlo
-    from generalito.evaluar import UMBRAL_REFERENCIA, porcentaje_que_supera
+    from generalito.evaluar import SEMILLA_EVALUACION, UMBRAL_REFERENCIA, porcentaje_que_supera
+
+    semilla = SEMILLA_EVALUACION if args.examen else SEMILLA_ANALISIS
 
     umbrales = [UMBRAL_REFERENCIA]
     for _, metricas in cargados:
@@ -93,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         """Juega todas las partidas a la vez. Devuelve los juegos y, si hay `otra`,
         en cada decisión anota qué habría elegido la otra red."""
         n = args.partidas
-        juegos = [Partida(FuenteReservada(SEMILLA_ANALISIS, i)) for i in range(n)]
+        juegos = [Partida(FuenteReservada(semilla, i)) for i in range(n)]
         decisiones = []  # (partida, turno, tiro, dados, jugada, valor anotado o None)
         distintas = []
         estados = np.zeros((n, TAMANO_ESTADO), dtype=np.float32)
@@ -144,6 +169,52 @@ def main(argv: list[str] | None = None) -> int:
 
         return al_avanzar
 
+    def jugar_lado(k: int, otra: int | None, etapa: str):
+        """Juega con el modelo k (y, si hay `otra`, anota qué haría el modelo `otra`).
+        Devuelve (partidas, decisiones, distintas, segundos por partida)."""
+        import time
+
+        if not pensar[k] and (otra is None or not pensar[otra]):
+            inicio = time.perf_counter()
+            juegos, decisiones, distintas = jugar(
+                redes[k], redes[otra] if otra is not None else None, progreso(etapa)
+            )
+            segundos = (time.perf_counter() - inicio) / max(1, len(juegos))
+            partidas = [{"total": p.total(), "casillas": p.planilla.casillas} for p in juegos]
+            return partidas, decisiones, distintas, segundos
+        from generalito.agente.pensar import jugar_en_paralelo
+
+        def spec(i: int) -> dict:
+            return {"ruta": str(args.modelo[i]), "pensar": pensar[i], "muestras": args.muestras}
+
+        def al_avanzar(hechas: int) -> str | None:
+            motivo = guardian.revisar(0)
+            escribir(
+                {
+                    "terminado": False,
+                    "etapa": etapa,
+                    "avance": round(min(hechas / args.partidas, 0.99), 2),
+                    "pausa": guardian.pausa,
+                }
+            )
+            return motivo
+
+        resultados = jugar_en_paralelo(
+            spec(k),
+            spec(otra) if otra is not None else None,
+            args.partidas,
+            semilla,
+            limites.hilos_cpu,
+            al_avanzar,
+        )
+        decisiones = [(r["indice"], *d) for r in resultados for d in r["decisiones"]]
+        distintas = [(r["indice"], *d) for r in resultados for d in r["distintas"]]
+        segundos = statistics.fmean(r["segundos"] for r in resultados)
+        return resultados, decisiones, distintas, segundos
+
+    def etapa(k: int) -> str:
+        return f"Juega {nombres[k]}" + (" (pensando)" if pensar[k] else "")
+
     def texto(jugada: int, dados) -> str:
         accion = decodificar(jugada)
         if isinstance(accion, Anotar):
@@ -157,8 +228,9 @@ def main(argv: list[str] | None = None) -> int:
     resultado: dict = {}
     try:
         if args.tipo == "analizar":
-            juegos, decisiones, _ = jugar(redes[0], al_avanzar=progreso("Jugando partidas"))
+            juegos, decisiones, _, segundos = jugar_lado(0, None, etapa(0))
             n = len(juegos)
+            tablero = Planilla()
             suma = np.zeros(52)
             tachadas = np.zeros(52)
             tachadas_por_tiro = np.zeros((52, 3), dtype=int)
@@ -179,11 +251,14 @@ def main(argv: list[str] | None = None) -> int:
                     servida_con_puntaje += accion.columna == Columna.SERVIDA and valor > 0
                 else:
                     guardados[len(accion.guardar)] += 1
-            totales = [p.total() for p in juegos]
+            totales = [p["total"] for p in juegos]
             columnas = []
             for col in Columna:
-                subtotales = [p.planilla.subtotal(col) for p in juegos]
-                con_bonus = sum(p.planilla.suma_numeros(col) >= 60 for p in juegos)
+                subtotales, con_bonus = [], 0
+                for p in juegos:
+                    tablero.casillas = list(p["casillas"])
+                    subtotales.append(tablero.subtotal(col))
+                    con_bonus += tablero.suma_numeros(col) >= 60
                 columnas.append(
                     {
                         "nombre": NOMBRES_COLUMNAS[col],
@@ -193,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             resultado = {
                 "partidas": n,
+                "pensar": pensar[0],
+                "segundos_por_partida": round(segundos, 3),
                 "promedio": round(statistics.fmean(totales), 1),
                 "desvio": round(statistics.pstdev(totales), 1),
                 "maximo": max(totales),
@@ -221,10 +298,17 @@ def main(argv: list[str] | None = None) -> int:
                 ],
             }
         else:
-            juegos_a, _, distintas = jugar(redes[0], redes[1], progreso(f"Juega {nombres[0]}"))
-            juegos_b, _, _ = jugar(redes[1], al_avanzar=progreso(f"Juega {nombres[1]}"))
-            ta = [p.total() for p in juegos_a]
-            tb = [p.total() for p in juegos_b]
+            if pensar[1] and not pensar[0]:
+                # Pensar es lo lento: juega una sola vez el que piensa y en sus mismas
+                # situaciones se le pregunta al otro (rápido). Se cuentan desde las de B.
+                juegos_b, _, distintas, seg_b = jugar_lado(1, 0, etapa(1))
+                juegos_a, _, _, seg_a = jugar_lado(0, None, etapa(0))
+                distintas = [(i, t, r, d, ja, jb) for i, t, r, d, jb, ja in distintas]
+            else:
+                juegos_a, _, distintas, seg_a = jugar_lado(0, 1, etapa(0))
+                juegos_b, _, _, seg_b = jugar_lado(1, None, etapa(1))
+            ta = [p["total"] for p in juegos_a]
+            tb = [p["total"] for p in juegos_b]
             gana_a = sum(a > b for a, b in zip(ta, tb, strict=True))
             gana_b = sum(b > a for a, b in zip(ta, tb, strict=True))
             por_tiro = Counter(d[2] for d in distintas)
@@ -249,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
             resultado = {
                 "partidas": len(ta),
                 "nombres": nombres,
+                "pensar": pensar,
+                "segundos_por_partida": [round(seg_a, 3), round(seg_b, 3)],
                 "promedios": [round(statistics.fmean(ta), 1), round(statistics.fmean(tb), 1)],
                 "victorias": [gana_a, len(ta) - gana_a - gana_b, gana_b],
                 "diferencia_media": round(statistics.fmean(ta) - statistics.fmean(tb), 1),

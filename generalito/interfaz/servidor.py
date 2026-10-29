@@ -288,6 +288,11 @@ class Corridas:
             args += ["--objetivo", "superar", "--umbral", str(umbral)]
         elif objetivo_tipo != "puntaje":
             raise ValueError("Objetivo desconocido.")
+        examen_pensando = int(pedido.get("examen_pensando") or 0)
+        if not 0 <= examen_pensando <= 500:
+            raise ValueError("El examen pensando va de 0 a 500 partidas.")
+        if examen_pensando:
+            args += ["--examen-pensando", str(examen_pensando)]
         calentamiento = pedido.get("calentamiento")
         calentamiento = 5.0 if calentamiento in (None, "") else float(calentamiento)
         if not 0 <= calentamiento <= 50:
@@ -310,6 +315,7 @@ class Corridas:
                 "pista_fin": pista_fin,
                 "oculta": oculta,
                 "calentamiento": calentamiento if desde is not None else None,
+                "examen_pensando": examen_pensando,
             },
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }
@@ -322,17 +328,39 @@ class Corridas:
         claves = list(pedido.get("modelos") or [])
         if tipo not in ("analizar", "comparar") or len(claves) != (1 if tipo == "analizar" else 2):
             raise ValueError("Elegí un modelo para analizar, o dos para comparar.")
-        if tipo == "comparar" and claves[0] == claves[1]:
-            raise ValueError("Elegí dos modelos distintos.")
+        pensar = [bool(x) for x in (pedido.get("pensar") or [])]
+        pensar += [False] * (len(claves) - len(pensar))
+        if tipo == "comparar" and claves[0] == claves[1] and pensar[0] == pensar[1]:
+            raise ValueError("Elegí dos modelos distintos (o el mismo, pensando y sin pensar).")
         modelos = [self.catalogo.buscar(c) for c in claves]
-        partidas = min(20_000, max(10, int(pedido.get("partidas", 2000))))
-        args = [tipo, "--partidas", str(partidas)]
-        for m in modelos:
-            args += ["--modelo", m["ruta"], "--nombre", m["nombre"]]
+        examen = bool(pedido.get("examen"))
+        # Pensar es mucho más lento: por defecto, menos partidas
+        defecto = 500 if examen or any(pensar) else 2000
+        partidas = min(20_000, max(10, int(pedido.get("partidas") or defecto)))
+        muestras = min(252, max(0, int(pedido.get("muestras", 32))))
+        d = Limites()
+        args = [tipo, "--partidas", str(partidas), "--muestras", str(muestras)]
+        args += ["--hilos", str(int(pedido.get("hilos", d.hilos_cpu)))]
+        if examen:
+            args.append("--examen")
+        nombres = []
+        for m, piensa in zip(modelos, pensar, strict=True):
+            nombre = m["nombre"] + (" pensando" if piensa else "")
+            nombres.append(nombre)
+            args += [
+                "--modelo",
+                m["ruta"],
+                "--nombre",
+                nombre,
+                "--pensar",
+                "si" if piensa else "no",
+            ]
         provisoria = {
             "programa": tipo,
-            "jugador": " vs ".join(m["nombre"] for m in modelos),
-            "nombres": [m["nombre"] for m in modelos],
+            "jugador": " vs ".join(nombres),
+            "nombres": nombres,
+            "pensar": pensar,
+            "examen": examen,
             "limites": {"max_partidas": None, "max_minutos": 30},
         }
         nombre = datetime.now().strftime(f"%Y%m%d-%H%M%S-{tipo}")
@@ -482,9 +510,20 @@ class Catalogo:
         if self._cache.get("clave") != clave:
             from generalito.agente.red import cargar_snapshot
 
-            red, _ = cargar_snapshot(ruta)
-            self._cache.update(clave=clave, red=red, nombre=modelo["nombre"])
+            red, metricas = cargar_snapshot(ruta)
+            self._cache.clear()
+            self._cache.update(clave=clave, red=red, metricas=metricas, nombre=modelo["nombre"])
         return self._cache["red"]
+
+    def pensador_activo(self):
+        """El modelo activo, pero pensando el turno (ver generalito/agente/pensar.py)."""
+        red = self.red_activa()
+        if "pensador" not in self._cache:
+            from generalito.agente.pensar import Pensador
+
+            objetivo = (self._cache.get("metricas") or {}).get("entrenamiento", {}).get("objetivo")
+            self._cache["pensador"] = Pensador(red, objetivo)
+        return self._cache["pensador"]
 
     def resumen(self) -> dict:
         lista = self.lista()
@@ -499,12 +538,33 @@ def _elegir(red, partida) -> int:
     return elegir(red, partida)
 
 
-def sugerencia(mesa: Mesa, catalogo: Catalogo) -> dict:
+def sugerencia(mesa: Mesa, catalogo: Catalogo, pensar: bool = False) -> dict:
     partida = mesa.juego.partida
     if not catalogo.lista():
         return {"opciones": []}
     if partida.terminada:
         return {"modelo": catalogo.activo, "opciones": []}
+    if pensar:
+        import time
+
+        pensador = catalogo.pensador_activo()
+        inicio = time.perf_counter()
+        opciones = pensador.opciones(partida)[:3]
+        unidad = "%" if pensador.objetivo.get("tipo") == "superar" else "pts"
+        return {
+            "modelo": catalogo.activo,
+            "pensando": True,
+            "segundos": round(time.perf_counter() - inicio, 2),
+            "unidad": unidad,
+            "opciones": [
+                {
+                    "jugada": j,
+                    "texto": _texto_jugada(partida, j),
+                    "valor": round(pensador.en_puntos(partida, v), 1),
+                }
+                for j, v in opciones
+            ],
+        }
     from generalito.agente.red import probabilidades
 
     probs = probabilidades(catalogo.red_activa(), partida)
@@ -593,7 +653,8 @@ def crear_servidor(
             ):
                 if mesa := self._mesa(partes[2]):
                     with mesa.lock:
-                        self._responder(sugerencia(mesa, catalogo))
+                        pensar = "pensar=1" in self.path
+                        self._responder(sugerencia(mesa, catalogo, pensar))
             elif len(partes) == 3 and partes[:2] == ["api", "partidas"]:
                 if mesa := self._mesa(partes[2]):
                     self._responder(mesa.estado())
@@ -617,8 +678,16 @@ def crear_servidor(
                         elif partes[3] == "azar":
                             mesa.jugar_al_azar(pedido.get("hasta", "jugada"))
                         elif partes[3] == "modelo":
-                            red = catalogo.red_activa()
-                            mesa.jugar_con(lambda p: _elegir(red, p), pedido.get("hasta", "jugada"))
+                            if pedido.get("pensar"):
+                                pensador = catalogo.pensador_activo()
+                                elegir = pensador.elegir
+                            else:
+                                red = catalogo.red_activa()
+
+                                def elegir(p, red=red):
+                                    return _elegir(red, p)
+
+                            mesa.jugar_con(elegir, pedido.get("hasta", "jugada"))
                         else:
                             return self._error("Acción desconocida", HTTPStatus.NOT_FOUND)
                         self._responder(mesa.estado())

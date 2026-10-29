@@ -116,6 +116,16 @@ def test_modelos_con_nombre(tmp_path):
         _, p = pedir(url, f"/api/partidas/{p['id']}/modelo", {"hasta": "fin"})
         assert p["terminada"]
 
+        # Pensando el turno
+        _, p = pedir(url, "/api/partidas", {"semilla": 2})
+        _, s = pedir(url, f"/api/partidas/{p['id']}/sugerencia?pensar=1")
+        assert s["pensando"] and len(s["opciones"]) == 3 and s["unidad"] == "pts"
+        _, p = pedir(url, f"/api/partidas/{p['id']}/modelo", {"hasta": "turno", "pensar": True})
+        assert p["turno"] == 2
+        mismo = {"tipo": "comparar", "modelos": ["modelo-v1", "modelo-v1"]}
+        codigo, _ = pedir(url, "/api/analisis", mismo)
+        assert codigo == 400  # el mismo modelo, sin pensar en los dos lados
+
         codigo, r = pedir(
             url, "/api/analisis", {"tipo": "comparar", "modelos": ["ultimo", "ultimo"]}
         )

@@ -14,6 +14,28 @@ Formato:
 
 ---
 
+## 2026-10-30 · Pensar el turno (fase 1: solo para jugar y evaluar)
+
+**Contexto:** los modelos se estancan cerca de 850. Facu quiere que el modelo "piense" antes de jugar usando solo las reglas y su propia red, sin heurísticas humanas.
+
+**Decisión:**
+
+- **Búsqueda exacta dentro del turno (expectimax),** en `generalito/agente/pensar.py`. Se calcula una vez por turno, para la planilla de ese turno:
+  - Los dados se tratan como multiconjunto (252 combinaciones de 5 dados; 210 formas de guardar de 0 a 4). Las probabilidades de cada resultado al volver a tirar son exactas (tabla de transición de 210 × 252).
+  - Tiro 3: la mejor anotación. Tiros 1 y 2: el máximo entre anotar ya y cada forma de guardar, con su valor esperado exacto. Se distingue si el tiro fue servido (para la columna Servida).
+  - **Valor de anotar** = lo que gana esa anotación, según el objetivo con el que se entrenó el modelo (puntos, puntos + premio, o 1/0 en "Superar X"), más la estimación de valor de la red para la planilla que queda. Esa estimación se promedia sobre el primer tiro del turno siguiente.
+- **Promedio sobre el turno siguiente:** con K tiradas al azar (`--muestras`, 32 por defecto), las mismas para todas las opciones del turno, así se comparan con la misma suerte. Con K = 0 se usan las 252 combinaciones con sus probabilidades exactas; es unas 9 veces más lento, y cuánto mejora queda por medir. No hizo falta una red de "después de anotar": el promedio con muestras alcanza y no requiere entrenar nada nuevo.
+- **Sin heurísticas:** la búsqueda solo conoce las reglas (las jugadas legales y los puntajes del motor) y usa la red ya entrenada. Es la misma idea que la política de la red, pero con un paso de búsqueda exacto en el turno.
+- **Dónde está** (siempre opcional):
+  - Análisis: "Pensar el turno" en Analizar, "piensa" para cada lado en Comparar (se puede comparar un modelo consigo mismo si un lado piensa), y el botón "Examen: sin pensar vs pensando" (las 500 partidas fijas del examen).
+  - Jugar: "Pensar el turno" para las sugerencias (muestran el puntaje final esperado de cada opción) y para que el modelo juegue solo.
+  - Entrenar: "Examen pensando: N partidas". En cada examen juega además las primeras N partidas pensando y las compara con las mismas N sin pensar. No cambia cómo se elige `mejor.pt`.
+- **Recursos:** como es lento, juega en varios procesos (`--hilos`, por defecto la mitad de los núcleos) con prioridad baja, y el Guardian revisa los límites a medida que terminan las partidas. Se mide y se muestra el tiempo por partida.
+
+**Consecuencias:** pensar no entrena a la red. Si mejora mucho, la fase 2 sería entrenar a la red para que imite lo que decide pensando, a definir con Facu.
+
+---
+
 ## 2026-10-29 · Objetivo mixto: puntos + premio por llegar a X
 
 **Contexto:** con "Superar 950" (todo o nada), Facu ve que el modelo se desarma apenas termina el calentamiento: baja de 850 a 760 en un par de minutos. Con una sola señal de 0 o 1 al final, casi todas las partidas valen 0 y la política pierde lo que sabía.
