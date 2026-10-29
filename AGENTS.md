@@ -23,6 +23,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
   - pestaña Análisis: qué aprendió un modelo (mapas de calor y estadísticas) y comparación de dos modelos.
   - opciones de entrenamiento: horizonte, exploración, tamaño de la red, Pista del Bonus y objetivo ("Máximo puntaje", "Puntos + premio si llega a X" o "Superar X", este último solo siguiendo un modelo) y calentamiento del valor al cambiar de objetivo.
   - "Pensar el turno" (fase 1, solo para jugar y evaluar): en Análisis, Comparar, Jugar y como examen opcional del entrenamiento.
+  - "Aprender pensando" (fase 2, expert iteration): modo de Entrenar, solo desde un modelo entrenado.
 - **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
 - **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos. Para el análisis prefiere datos (gráficos, estadísticas, mapas de calor), no textos generados ni nada que use APIs de AI.
 
@@ -97,6 +98,7 @@ generalito/
     entornos.py         partidas en paralelo (varios procesos) y recompensa por paso
     pista.py            Pista del Bonus (única excepción de shaping, apagada por defecto)
     pensar.py           pensar el turno: expectimax exacto del turno + valor de la red (solo para jugar/evaluar)
+    aprender.py         comando generalito-aprender: Aprender pensando (la red imita a la búsqueda)
   interfaz/             interfaz local en el navegador (comando generalito)
     servidor.py         servidor HTTP de la biblioteca estándar, solo en 127.0.0.1
     pagina.html         la página: HTML + JS sin librerías ni internet
@@ -117,6 +119,7 @@ uv run ruff format . && uv run ruff check .
 uv run generalito-mostrar --semilla 5
 uv run generalito-simular --partidas 10000 --registrar-cada 1000
 uv run generalito-entrenar --minutos 60 [--desde corridas/<x>/modelo.pt]
+uv run generalito-aprender --desde modelos/<x>.pt --minutos 60
 ```
 
 Antes de cada commit: `ruff format`, `ruff check` y `pytest` sin errores.

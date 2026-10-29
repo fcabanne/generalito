@@ -142,6 +142,18 @@ def test_modelos_con_nombre(tmp_path):
         assert c["config"]["programa"] == "analizar"
         assert c["estado"]["resultado"]["partidas"] == 20
 
+        # "Aprender pensando": solo desde un modelo
+        codigo, error = pedir(url, "/api/entrenamientos", {"modo": "aprender", "minutos": 1})
+        assert codigo == 400 and "modelo entrenado" in error["error"]
+        aprender = {"modo": "aprender", "minutos": 1, "desde": "modelo-v1", "partidas_ciclo": 50}
+        codigo, r = pedir(url, "/api/entrenamientos", aprender)
+        assert codigo == 200
+        proceso = servidor.corridas.procesos[r["nombre"]]
+        assert proceso.args[proceso.args.index("-m") + 1] == "generalito.agente.aprender"
+        assert proceso.args[proceso.args.index("--partidas-ciclo") + 1] == "50"
+        proceso.terminate()
+        proceso.wait(timeout=30)
+
         # "Superar X" siguiendo un modelo guardado; no se combina con la pista
         objetivo = {"tipo": "superar", "umbral": 900}
         pedido = {"minutos": 1, "desde": "modelo-v1", "objetivo": objetivo}

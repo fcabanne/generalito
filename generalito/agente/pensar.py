@@ -315,6 +315,37 @@ def _jugar_varias(datos) -> list[dict]:
     return [jugar_partida(spec, otra, i, semilla) for i in indices]
 
 
+def _en_paralelo(funcion, lotes: list, trabajadores: int, al_avanzar=None) -> list[dict]:
+    """Corre `funcion(lote)` (que devuelve una lista) para cada lote, en `trabajadores`
+    procesos con prioridad baja. `al_avanzar(hechas)` se llama a medida que terminan;
+    si devuelve un motivo, se corta todo (InterruptedError)."""
+    import multiprocessing as mp
+
+    resultados: list[dict] = []
+    if trabajadores <= 1:
+        for lote in lotes:
+            resultados.extend(funcion(lote))
+            if al_avanzar and (motivo := al_avanzar(len(resultados))):
+                raise InterruptedError(motivo)
+        return resultados
+    contexto = mp.get_context("spawn")
+    with contexto.Pool(trabajadores, initializer=_iniciar_trabajador) as pool:
+        try:
+            for parte in pool.imap_unordered(funcion, lotes):
+                resultados.extend(parte)
+                if al_avanzar and (motivo := al_avanzar(len(resultados))):
+                    raise InterruptedError(motivo)
+        except BaseException:
+            pool.terminate()
+            raise
+    return resultados
+
+
+def _lotes(partidas: int, trabajadores: int) -> list[list[int]]:
+    tanda = max(1, min(10, partidas // max(1, trabajadores * 4)))
+    return [list(range(i, min(partidas, i + tanda))) for i in range(0, partidas, tanda)]
+
+
 def jugar_en_paralelo(
     spec: dict,
     otra: dict | None,
@@ -323,30 +354,116 @@ def jugar_en_paralelo(
     trabajadores: int,
     al_avanzar=None,
 ) -> list[dict]:
-    """Juega `partidas` partidas en `trabajadores` procesos. `al_avanzar(hechas)` se llama
-    a medida que terminan; si devuelve un motivo, se corta todo (InterruptedError)."""
-    import multiprocessing as mp
+    """Juega `partidas` partidas (dados reservados) en `trabajadores` procesos."""
+    lotes = [(spec, otra, indices, semilla) for indices in _lotes(partidas, trabajadores)]
+    resultados = _en_paralelo(_jugar_varias, lotes, trabajadores, al_avanzar)
+    return sorted(resultados, key=lambda r: r["indice"])
 
-    tanda = max(1, min(10, partidas // max(1, trabajadores * 4)))
+
+# --- Generar partidas pensando, para aprender de ellas (fase 2) ---
+
+OPCIONES_GUARDADAS = 8  # cuántas de las mejores opciones de la búsqueda se guardan por decisión
+
+
+def equivalentes(dados: tuple[int, ...], jugada: int) -> int:
+    """Para volver a tirar: todas las máscaras de guardado que guardan los mismos valores
+    (guardar "el primer 5" o "el segundo 5" es lo mismo), como bits 0 a 30. 0 si es anotar."""
+    if jugada >= 31:
+        return 0
+    guardado = sorted(dados[i] for i in range(5) if jugada >> i & 1)
+    bits = 0
+    for mascara in range(31):
+        if sorted(dados[i] for i in range(5) if mascara >> i & 1) == guardado:
+            bits |= 1 << mascara
+    return bits
+
+
+def _distribucion(valores: np.ndarray, temperatura: float) -> np.ndarray:
+    z = (valores - valores.max()) / max(temperatura, 1e-9)
+    p = np.exp(z)
+    return p / p.sum()
+
+
+def generar_partida(spec: dict, indice: int, semilla: int, variedad: float,
+                    temperatura: float) -> dict:  # fmt: skip
+    """Una partida pensando, con dados al azar, guardando de cada decisión la situación,
+    las mejores opciones de la búsqueda (como probabilidades) y, al final, lo que se
+    consiguió desde ahí. Con probabilidad `variedad` no juega la mejor opción sino que
+    sortea entre las mejores según sus valores."""
+    from generalito.motor import FuenteAzar
+
+    pensador = _jugador({**spec, "pensar": True})
+    rng = np.random.default_rng([semilla, indice])
+    partida = Partida(FuenteAzar(int(rng.integers(2**63))))
+    filas = []
+    while not partida.terminada:
+        opciones = pensador.opciones(partida)[:OPCIONES_GUARDADAS]
+        jugadas = np.array([j for j, _ in opciones], dtype=np.int16)
+        objetivo = _distribucion(np.array([v for _, v in opciones]), temperatura)
+        if rng.random() < variedad:
+            jugada = int(jugadas[rng.choice(len(jugadas), p=objetivo)])
+        else:
+            jugada = int(jugadas[0])
+        objetivo_completo = np.zeros(OPCIONES_GUARDADAS, dtype=np.float16)
+        jugadas_completas = np.full(OPCIONES_GUARDADAS, -1, dtype=np.int16)
+        equivalentes_completos = np.zeros(OPCIONES_GUARDADAS, dtype=np.int32)
+        objetivo_completo[: len(jugadas)] = objetivo
+        jugadas_completas[: len(jugadas)] = jugadas
+        equivalentes_completos[: len(jugadas)] = [
+            equivalentes(partida.dados, int(j)) for j in jugadas
+        ]
+        filas.append(
+            (
+                partida.dados,
+                partida.tiro,
+                partida.ultimo_tiro_servido,
+                partida.turno,
+                list(partida.planilla.casillas),
+                np.packbits(partida.mascara_legal()),
+                jugadas_completas,
+                objetivo_completo,
+                equivalentes_completos,
+                partida.total(),
+                opciones[0][1],  # lo que la búsqueda espera conseguir desde acá
+            )
+        )
+        partida.aplicar(jugada)
+    (dados, tiro, servido, turno, casillas, mascara, jugadas, objetivo, equiv, total,
+     valor_busqueda) = zip(*filas, strict=True)  # fmt: skip
+    return {
+        "indice": indice,
+        "total": partida.total(),
+        "dados": np.array(dados, dtype=np.int8),
+        "tiro": np.array(tiro, dtype=np.int8),
+        "servido": np.array(servido, dtype=bool),
+        "turno": np.array(turno, dtype=np.int8),
+        "casillas": np.array(casillas, dtype=np.int8),
+        "mascara": np.stack(mascara),
+        "jugadas": np.stack(jugadas),
+        "objetivo": np.stack(objetivo),
+        "equivalentes": np.stack(equiv),
+        "total_antes": np.array(total, dtype=np.int16),
+        "valor_busqueda": np.array(valor_busqueda, dtype=np.float32),
+    }
+
+
+def _generar_varias(datos) -> list[dict]:
+    spec, indices, semilla, variedad, temperatura = datos
+    return [generar_partida(spec, i, semilla, variedad, temperatura) for i in indices]
+
+
+def generar_en_paralelo(
+    spec: dict,
+    partidas: int,
+    semilla: int,
+    trabajadores: int,
+    variedad: float,
+    temperatura: float,
+    al_avanzar=None,
+) -> list[dict]:
     lotes = [
-        (spec, otra, list(range(i, min(partidas, i + tanda))), semilla)
-        for i in range(0, partidas, tanda)
+        (spec, indices, semilla, variedad, temperatura)
+        for indices in _lotes(partidas, trabajadores)
     ]
-    resultados: list[dict] = []
-    if trabajadores <= 1:
-        for lote in lotes:
-            resultados.extend(_jugar_varias(lote))
-            if al_avanzar and (motivo := al_avanzar(len(resultados))):
-                raise InterruptedError(motivo)
-        return resultados
-    contexto = mp.get_context("spawn")
-    with contexto.Pool(trabajadores, initializer=_iniciar_trabajador) as pool:
-        try:
-            for parte in pool.imap_unordered(_jugar_varias, lotes):
-                resultados.extend(parte)
-                if al_avanzar and (motivo := al_avanzar(len(resultados))):
-                    raise InterruptedError(motivo)
-        except BaseException:
-            pool.terminate()
-            raise
+    resultados = _en_paralelo(_generar_varias, lotes, trabajadores, al_avanzar)
     return sorted(resultados, key=lambda r: r["indice"])

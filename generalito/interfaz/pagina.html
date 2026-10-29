@@ -148,7 +148,7 @@
   .cifras b { display: block; font-size: 17px; color: var(--texto); }
   .histo { position: relative; margin-top: 10px; }
   .histo svg { width: 100%; height: 140px; display: block; }
-  .histo svg.curva { height: auto; }
+  .histo svg.curva, .histo svg.curva-ciclos { height: auto; }
   .histo .eje { fill: var(--texto-2); font-size: 11px; }
   .histo rect.hit { fill: transparent; }
   .tooltip {
@@ -198,11 +198,12 @@
       <h2>Entrenar al modelo</h2>
       <p class="gris chico">El modelo juega solo miles de partidas y aprende de sus resultados. Nadie le enseña cómo jugar.</p>
       <div class="formulario">
+        <label>Modo<select id="e-modo"><option value="normal">Normal: aprende jugando</option><option value="aprender">Aprender pensando</option></select><span id="e-modo-ayuda">Juega solo y aprende de los resultados.</span></label>
         <label>Minutos<input id="e-minutos" type="number" value="60" min="1"><span>Frena solo al llegar a este tiempo.</span></label>
         <label>Núcleos de CPU<input id="e-hilos" type="number" value="2" min="1"><span>Cuántos puede usar.</span></label>
-        <label>Horizonte (lambda-gae)<input id="e-lambda" type="number" value="0.95" min="0.5" max="1" step="0.01"><span>Cuántas jugadas hacia adelante tiene en cuenta al repartir el mérito. 0.95 ≈ 20 jugadas; 0.99 ≈ 100.</span></label>
-        <label>Exploración (entropía)<input id="e-entropia" type="number" value="0.01" min="0" max="0.2" step="0.005"><span>Cuánto se anima a probar jugadas distintas a su favorita. 0 = nada; más alto = prueba más.</span></label>
-        <div class="pista-campo">
+        <label class="solo-normal">Horizonte (lambda-gae)<input id="e-lambda" type="number" value="0.95" min="0.5" max="1" step="0.01"><span>Cuántas jugadas hacia adelante tiene en cuenta al repartir el mérito. 0.95 ≈ 20 jugadas; 0.99 ≈ 100.</span></label>
+        <label class="solo-normal">Exploración (entropía)<input id="e-entropia" type="number" value="0.01" min="0" max="0.2" step="0.005"><span>Cuánto se anima a probar jugadas distintas a su favorita. 0 = nada; más alto = prueba más.</span></label>
+        <div class="pista-campo solo-normal">
           <label style="flex-direction:row;align-items:center;gap:6px"><input id="e-pista" type="checkbox"> Pista del Bonus</label>
           <div class="fila" style="gap:6px;margin-top:4px;flex-wrap:nowrap">
             <input id="e-pista-peso" class="campo" type="number" value="0.5" min="0.05" max="2" step="0.05" style="width:72px" disabled title="Peso inicial">
@@ -212,8 +213,8 @@
           </div>
           <span class="chico gris">Excepción controlada: adelanta el valor de acercarse a 60 en los números y lo descuenta al final (no cambia el puntaje). Peso inicial, que baja a 0 en ese % del entrenamiento.</span>
         </div>
-        <label>Tamaño de la red<select id="e-oculta"><option value="256">256 (la de siempre)</option><option value="512">512</option><option value="1024">1024</option></select><span id="e-oculta-ayuda">Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento.</span></label>
-        <div class="pista-campo">
+        <label class="solo-normal">Tamaño de la red<select id="e-oculta"><option value="256">256 (la de siempre)</option><option value="512">512</option><option value="1024">1024</option></select><span id="e-oculta-ayuda">Neuronas por capa. Más grande puede aprender más, pero cada ajuste es más lento.</span></label>
+        <div class="pista-campo solo-normal">
           <span>Objetivo</span>
           <div class="fila" style="gap:6px;flex-wrap:nowrap">
             <select id="e-objetivo"><option value="puntaje">Máximo puntaje</option><option value="mixto">Puntos + premio si llega a X</option><option value="superar">Superar X puntos (todo o nada)</option></select>
@@ -236,6 +237,8 @@
             <span class="chico gris">partidas (0 = no; es lento)</span>
           </div>
         </div>
+        <label class="solo-aprender oculto">Partidas por ciclo<input id="e-partidas-ciclo" type="number" value="500" min="10" max="10000" step="50"><span>En cada ciclo juega estas partidas pensando y después aprende de ellas.</span></label>
+        <label class="solo-aprender oculto">Variedad<input id="e-variedad" type="number" value="0.15" min="0" max="1" step="0.05"><span>Cada cuánto, en vez de la mejor jugada, sortea entre las mejores según sus valores (para ver situaciones distintas).</span></label>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
       <button class="boton principal" id="b-entrenar">Empezar a entrenar</button>
@@ -783,13 +786,14 @@ async function refrescarEntrenamientos() {
   const hayActiva = todas.some((c) => c.situacion === "corriendo" || c.situacion === "parando");
   $("#b-entrenar").disabled = hayActiva;
   $("#b-entrenar").textContent = hayActiva ? "Hay algo corriendo" : "Empezar a entrenar";
-  const lista = todas.filter((c) => c.config.programa === "entrenar");
+  const lista = todas.filter((c) => c.config.programa === "entrenar" || c.config.programa === "aprender");
   const caja = $("#entrenamientos");
   if (!lista.length) { caja.innerHTML = `<p class="gris">Todavía no hay entrenamientos.</p>`; return; }
   const porId = {};
   caja.innerHTML = lista.map((c) => {
     const e = c.estado || {};
     porId[c.nombre] = e;
+    if (c.config.programa === "aprender") return tarjetaAprender(c, e);
     const fecha = c.nombre.slice(0, 15).replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, "$3/$2/$1 $4:$5");
     const r = e.recursos || {};
     const ultimaEval = (e.evaluaciones || []).slice(-1)[0];
@@ -831,10 +835,14 @@ async function refrescarEntrenamientos() {
     }))
   );
   conectarCurvas(caja, porId);
+  conectarCiclos(caja, porId);
 }
 
 $("#b-entrenar").addEventListener("click", () => accion(async () => {
   await api("POST", "/api/entrenamientos", {
+    modo: $("#e-modo").value,
+    partidas_ciclo: $("#e-partidas-ciclo").value,
+    variedad: $("#e-variedad").value,
     minutos: +$("#e-minutos").value,
     hilos: +$("#e-hilos").value,
     desde: $("#e-desde").value,
@@ -848,6 +856,97 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
   });
   setTimeout(refrescarEntrenamientos, 800);
 }));
+
+// --- Aprender pensando ---
+function tarjetaAprender(c, e) {
+  const fecha = c.nombre.slice(0, 15).replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/, "$3/$2/$1 $4:$5");
+  const ev = e.evaluaciones || [], ultimo = ev[ev.length - 1], primero = ev[0];
+  const ap = (e.aprendizaje || []).slice(-1)[0];
+  const r = e.recursos || {}, par = c.config.parametros || {};
+  const partes = (c.config.desde || "").split(/[\\/]/);
+  let desde = (partes.slice(-1)[0] || "").replace(/\.pt$/, "");
+  if (desde === "mejor" || desde === "modelo") desde = `el entrenamiento ${partes.slice(-2)[0] || ""}`;
+  const estadoTxt = c.situacion === "corriendo" ? (e.pausa ? "En pausa" : (e.etapa || "Preparando…")) : NOMBRE_SITUACION[c.situacion];
+  const sinPensar = (x) => (x ? x.promedio : "–");
+  const pensando = (x) => (x && x.pensando ? x.pensando.promedio : "–");
+  const llega = (x) => (x && x.supera_950_pct != null ? `${x.supera_950_pct}% llega a 950` : "");
+  const llegaP = (x) => (x && x.pensando ? `${x.pensando.supera_950_pct}% llega a 950` : "");
+  return `<div class="tarjeta">
+    <div class="corrida-cab">
+      <div><b>${fecha}</b> · <span class="gris">Aprender pensando, desde ${desde}</span></div>
+      <div class="fila">
+        <span class="estado-pill ${c.situacion}">${estadoTxt}</span>
+        ${c.situacion === "corriendo" ? `<button class="boton peligro" data-parar="${c.nombre}">Parar</button>` : ""}
+      </div>
+    </div>
+    <div class="cifras" style="margin-top:10px">
+      <div>Ciclos completos<b>${Math.max(0, ev.length - 1)}</b>${par.partidas_ciclo ?? "–"} partidas por ciclo</div>
+      <div>Sin pensar<b>${sinPensar(ultimo)}</b>${llega(ultimo)} · empezó en ${sinPensar(primero)}</div>
+      <div>Pensando<b>${pensando(ultimo)}</b>${llegaP(ultimo)} · empezó en ${pensando(primero)}</div>
+      <div>Coincide con la búsqueda<b>${ap ? ap.coincide_pct + "%" : "–"}</b>de las decisiones (la red sola)</div>
+      <div>Partidas pensadas<b>${(e.partidas ?? 0).toLocaleString("es-AR")}</b>${e.partidas_por_minuto ?? "–"} por minuto</div>
+      <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
+      <div>Datos guardados<b>${e.datos_mb ?? 0} MB</b></div>
+      <div>Variedad<b>${par.variedad ?? "–"}</b></div>
+    </div>
+    ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}.</p>` : ""}
+    ${e.motivo ? `<p class="gris chico">Por qué terminó: ${e.motivo}.</p>` : ""}
+    ${curvaCiclos(ev, c.nombre)}
+  </div>`;
+}
+
+function curvaCiclos(ev, id) {
+  if (!ev.length) return "";
+  const W = 700, H = 240, izq = 40, der = CURVA_DER, arr = 10, aba = 26;
+  const series = [
+    { nombre: "Sin pensar", color: "var(--serie-1)", v: ev.map((x) => x.promedio) },
+    { nombre: "Pensando", color: "var(--serie-2)", v: ev.map((x) => (x.pensando ? x.pensando.promedio : null)) },
+  ];
+  const todos = [950, ...series.flatMap((s) => s.v.filter((v) => v != null))];
+  const yMin = Math.floor(Math.min(...todos) / 50) * 50 - 50, yMax = Math.ceil(Math.max(...todos) / 50) * 50 + 50;
+  const n = Math.max(1, ev.length - 1);
+  const X = (i) => izq + (i / n) * (W - izq - der);
+  const Y = (v) => arr + (1 - (v - yMin) / (yMax - yMin)) * (H - arr - aba);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="curva-ciclos" data-id="${id}" role="img" aria-label="Exámenes por ciclo">`;
+  for (let k = 0; k <= 4; k++) {
+    const v = yMin + (k * (yMax - yMin)) / 4;
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--borde)"/><text x="${izq - 6}" y="${Y(v) + 4}" text-anchor="end" class="eje">${Math.round(v)}</text>`;
+  }
+  svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(950)}" y2="${Y(950)}" stroke="var(--texto-3)" stroke-dasharray="4 4" stroke-width="1.5"/><text x="${W - der + 6}" y="${Y(950) + 4}" class="eje">familia 950</text>`;
+  svg += `<text x="${izq}" y="${H - 6}" class="eje">ciclo 0</text><text x="${W - der}" y="${H - 6}" text-anchor="end" class="eje">ciclo ${ev.length - 1}</text>`;
+  for (const s of series) {
+    const pts = s.v.map((v, i) => (v == null ? null : [X(i), Y(v)])).filter(Boolean);
+    if (pts.length > 1) svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" points="${pts.map((p) => p.join(",")).join(" ")}"/>`;
+    for (const [x, y] of pts) svg += `<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="var(--superficie)" stroke-width="2"/>`;
+  }
+  svg += `<line class="cruz oculto" y1="${arr}" y2="${H - aba}" stroke="var(--texto-2)"/><rect x="${izq}" y="0" width="${W - izq - der}" height="${H}" fill="transparent" class="zona"/></svg>`;
+  return `<div class="histo">${svg}
+    <div class="fila chico gris" style="gap:16px">${series.map((s) => `<span><span style="display:inline-block;width:14px;height:2px;background:${s.color};vertical-align:middle"></span> ${s.nombre}</span>`).join("")}<span>- - - nivel familia</span><span>· examen: partidas fijas</span></div>
+    <div class="tooltip oculto"></div></div>`;
+}
+
+function conectarCiclos(caja, porId) {
+  caja.querySelectorAll("svg.curva-ciclos").forEach((svg) => {
+    const ev = (porId[svg.dataset.id] || {}).evaluaciones || [];
+    const histo = svg.parentElement, tip = histo.querySelector(".tooltip");
+    const cruz = svg.querySelector(".cruz"), zona = svg.querySelector(".zona");
+    const n = Math.max(1, ev.length - 1);
+    zona.addEventListener("mousemove", (evento) => {
+      const r = svg.getBoundingClientRect(), escala = 700 / r.width;
+      const x = (evento.clientX - r.left) * escala;
+      const i = Math.max(0, Math.min(ev.length - 1, Math.round(((x - 40) / (700 - 40 - CURVA_DER)) * n)));
+      const e = ev[i], cx = 40 + (i / n) * (700 - 40 - CURVA_DER);
+      cruz.setAttribute("x1", cx); cruz.setAttribute("x2", cx); cruz.classList.remove("oculto");
+      const p = e.pensando ? ` · pensando ${e.pensando.promedio} (${e.pensando.supera_950_pct}% llega a 950)` : "";
+      tip.textContent = `Ciclo ${e.ciclo}: sin pensar ${e.promedio} (${e.supera_950_pct}% llega a 950)${p}`;
+      const caja2 = histo.getBoundingClientRect();
+      tip.style.left = cx / escala + (r.left - caja2.left) + "px";
+      tip.style.top = evento.clientY - caja2.top - 10 + "px";
+      tip.classList.remove("oculto");
+    });
+    zona.addEventListener("mouseleave", () => { tip.classList.add("oculto"); cruz.classList.add("oculto"); });
+  });
+}
 
 function textoPista(par, pistaEstado) {
   const peso = par && par.pista_bonus;
@@ -870,6 +969,7 @@ async function refrescarModelos() {
   desde.innerHTML = `<option value="cero">Cero (sin saber nada)</option>` + opciones;
   desde.value = [...desde.options].some((o) => o.value === elegido) ? elegido : (r.modelos.length ? r.modelos[0].clave : "cero");
   actualizarTamano();
+  actualizarModo();
   for (const [id, i] of [["#a-modelo", 0], ["#c-a", 0], ["#c-b", 1]]) {
     const sel = $(id), antes = sel.value;
     sel.innerHTML = opciones || `<option value="">(ninguno todavía)</option>`;
@@ -929,6 +1029,21 @@ function actualizarObjetivo() {
   for (const id of ["#e-pista-peso", "#e-pista-fin"]) $(id).disabled = !$("#e-pista").checked;
 }
 $("#e-desde").addEventListener("change", actualizarTamano);
+function actualizarModo() {
+  const aprender = $("#e-modo").value === "aprender";
+  document.querySelectorAll(".solo-normal").forEach((x) => x.classList.toggle("oculto", aprender));
+  document.querySelectorAll(".solo-aprender").forEach((x) => x.classList.toggle("oculto", !aprender));
+  $("#e-modo-ayuda").textContent = aprender
+    ? "Juega pensando el turno y la red aprende de lo que decidió. Solo desde un modelo entrenado; el objetivo es el del modelo."
+    : "Juega solo y aprende de los resultados.";
+  const cero = $("#e-desde").querySelector('[value="cero"]');
+  if (cero) cero.disabled = aprender;
+  if (aprender && $("#e-desde").value === "cero" && $("#e-desde").options.length > 1) {
+    $("#e-desde").selectedIndex = 1;
+    actualizarTamano();
+  }
+}
+$("#e-modo").addEventListener("change", actualizarModo);
 $("#e-objetivo").addEventListener("change", actualizarObjetivo);
 
 $("#e-pista").addEventListener("change", () => {

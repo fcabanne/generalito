@@ -14,6 +14,31 @@ Formato:
 
 ---
 
+## 2026-10-30 · Aprender pensando (fase 2, "expert iteration")
+
+**Contexto:** el examen de v3.0.99 dio 853 sin pensar y 943 pensando (45% llega a 950). Facu quiere que la red aprenda de lo que decide pensando, sin nada humano.
+
+**Decisión:** `generalito/agente/aprender.py` (`generalito-aprender`), en ciclos:
+
+1. **Generar:** el modelo juega N partidas pensando el turno (`--partidas-ciclo`, 500 por defecto), en varios procesos, con dados al azar (no los del examen). De cada decisión se guarda:
+   - la situación en crudo (dados, tiro, servido, turno, planilla) y qué jugadas eran legales;
+   - las 8 mejores opciones de la búsqueda, como probabilidades: softmax de sus valores con una temperatura de 5 puntos (`--temperatura`);
+   - el valor que calculó la búsqueda en esa decisión y, al terminar la partida, lo que realmente se consiguió desde ahí, según el objetivo del modelo.
+2. **Variedad controlada:** con probabilidad `--variedad` (0.15 por defecto) no juega la mejor opción, sino que sortea entre las 8 mejores según esas probabilidades. Así la red no ve siempre las mismas situaciones.
+3. **Aprender:** con los últimos 3 ciclos (`--ciclos-memoria`):
+   - **Política:** imita las probabilidades de la búsqueda. Las formas equivalentes de guardar dados (los mismos valores en distintas posiciones) cuentan como una sola opción; si no, la red aprendería posiciones arbitrarias.
+   - **Valor:** aprende una mezcla: 70% el valor que calculó la búsqueda en esa decisión (estable) y 30% lo que realmente se consiguió (`--peso-busqueda`). Con solo lo conseguido, la señal de pocas partidas es muy ruidosa y en las pruebas el valor se deterioraba (bajaba también el promedio pensando).
+4. **Examen por ciclo:** las 500 partidas fijas, sin pensar y pensando, con promedio y % que llega a 950. `mejor.pt` es el de mejor examen pensando (según el objetivo del modelo).
+
+- **Solo desde un modelo entrenado**, y se mantiene su objetivo (puntaje, mixto o "Superar X") porque el valor de la red está en esa escala. No se usa la Pista del Bonus.
+- **Recursos:** las partidas se guardan comprimidas en `datos/` (menos de 1 MB cada 100 partidas) y el entrenamiento frena si superarían el límite de disco. Se respetan los mismos límites y el Guardian que en el resto. De las redes de cada ciclo se guardan solo las últimas 2.
+- **Interfaz:** en Entrenar, modo "Aprender pensando", con minutos, núcleos, partidas por ciclo y variedad. La tarjeta muestra el ciclo, los exámenes sin pensar y pensando con su gráfico, cuánto coincide la red sola con la búsqueda y los datos guardados.
+- **Nada humano:** la búsqueda solo usa las reglas y la propia red; la red imita a la búsqueda, no a personas.
+
+**Prueba de 20 minutos acá** (3 núcleos; modelo de prueba de 643 puntos; 150 partidas por ciclo; 13 ciclos; 2.100 partidas; 12 MB de datos): sin pensar, de 643 a 742; pensando, de 893 (21% llega a 950) a 910 (36%). La red sola coincide con la búsqueda en el 36% de las decisiones al principio y en el 49% al final. En los primeros 2 o 3 ciclos las dos bajan, mientras la red aprende otra forma de guardar dados: al principio coincide con la búsqueda solo en el 18% de esas decisiones, contra 66% a 90% al anotar. Después se recuperan y suben. Con el valor aprendiendo solo de lo conseguido (sin la mezcla), el promedio pensando bajaba de 893 a 865 en 3 ciclos.
+
+---
+
 ## 2026-10-30 · Pensar el turno (fase 1: solo para jugar y evaluar)
 
 **Contexto:** los modelos se estancan cerca de 850. Facu quiere que el modelo "piense" antes de jugar usando solo las reglas y su propia red, sin heurísticas humanas.

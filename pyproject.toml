@@ -15,6 +15,7 @@ generalito-simular = "generalito.simular:main"
 generalito-mostrar = "generalito.mostrar:main"
 generalito = "generalito.interfaz.servidor:main"
 generalito-entrenar = "generalito.agente.entrenar:main"
+generalito-aprender = "generalito.agente.aprender:main"
 
 [dependency-groups]
 dev = [

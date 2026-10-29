@@ -219,7 +219,45 @@ class Corridas:
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-simular")
         return self._ejecutar(nombre, provisoria, "generalito.simular", args)
 
+    def aprender_pensando(self, pedido: dict) -> str:
+        """Modo "Aprender pensando" (fase 2): solo desde un modelo entrenado."""
+        d = Limites()
+        minutos = float(pedido.get("minutos", 60))
+        if not 0 < minutos <= 7 * 24 * 60:
+            raise ValueError("Los minutos tienen que estar entre 1 y una semana")
+        clave = pedido.get("desde", "cero")
+        if clave == "cero":
+            raise ValueError("“Aprender pensando” solo se usa desde un modelo entrenado.")
+        desde = str(self.catalogo.ruta(clave))
+        partidas = int(pedido.get("partidas_ciclo") or 500)
+        if not 10 <= partidas <= 10_000:
+            raise ValueError("Las partidas por ciclo van de 10 a 10.000.")
+        variedad = pedido.get("variedad")
+        variedad = 0.15 if variedad in (None, "") else float(variedad)
+        if not 0 <= variedad <= 1:
+            raise ValueError("La variedad va de 0 a 1.")
+        args = [
+            "--desde", desde,
+            "--minutos", str(minutos),
+            "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
+            "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
+            "--partidas-ciclo", str(partidas),
+            "--variedad", str(variedad),
+        ]  # fmt: skip
+        provisoria = {
+            "programa": "aprender",
+            "jugador": "agente",
+            "modo": "aprender_pensando",
+            "desde": desde,
+            "parametros": {"partidas_ciclo": partidas, "variedad": variedad},
+            "limites": {"max_partidas": None, "max_minutos": minutos},
+        }
+        nombre = datetime.now().strftime("%Y%m%d-%H%M%S-aprender")
+        return self._ejecutar(nombre, provisoria, "generalito.agente.aprender", args)
+
     def entrenar(self, pedido: dict) -> str:
+        if pedido.get("modo") == "aprender":
+            return self.aprender_pensando(pedido)
         d = Limites()
         minutos = float(pedido.get("minutos", 60))
         if not 0 < minutos <= 7 * 24 * 60:

@@ -67,3 +67,31 @@ def codificar_lote(
     x[:, :, _INICIO_PLANILLA:_TURNO] = planilla.reshape(n_l, 1, -1)
     x[:, :, _TURNO] = turno / 52.0
     return x
+
+
+def codificar_crudo(
+    dados: np.ndarray,
+    tiro: np.ndarray,
+    servido: np.ndarray,
+    turno: np.ndarray,
+    casillas: np.ndarray,
+) -> np.ndarray:
+    """N estados guardados como datos crudos (dados (N,5), tiro, servido, turno (N,),
+    casillas (N,52)) → (N, TAMANO_ESTADO), igual que `codificar` uno por uno.
+
+    Lo usa "Aprender pensando" para no guardar el vector entero de cada decisión.
+    """
+    dados = np.asarray(dados, dtype=np.int64)
+    n = dados.shape[0]
+    x = np.zeros((n, TAMANO_ESTADO), dtype=np.float32)
+    filas = np.arange(n)[:, None]
+    x[filas, np.arange(5)[None, :] * 6 + dados - 1] = 1.0
+    x[np.arange(n), _INICIO_TIRO + np.asarray(tiro, dtype=np.int64) - 1] = 1.0
+    x[:, _SERVIDO] = np.asarray(servido, dtype=np.float32)
+    casillas = np.asarray(casillas, dtype=np.float32)
+    planilla = x[:, _INICIO_PLANILLA:_TURNO].reshape(n, CANTIDAD_CASILLAS, 3)
+    planilla[:, :, 0] = casillas == LIBRE
+    planilla[:, :, 1] = casillas == TACHADA
+    planilla[:, :, 2] = np.maximum(casillas, 0) / 80.0
+    x[:, _TURNO] = np.asarray(turno, dtype=np.float32) / 52.0
+    return x
