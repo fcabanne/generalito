@@ -153,6 +153,14 @@ def test_modelos_con_nombre(tmp_path):
         assert proceso.args[proceso.args.index("--partidas-ciclo") + 1] == "50"
         proceso.terminate()
         proceso.wait(timeout=30)
+        codigo, _ = pedir(url, "/api/entrenamientos", {**aprender, "alumna_oculta": 300})
+        assert codigo == 400
+        codigo, r = pedir(url, "/api/entrenamientos", {**aprender, "alumna_oculta": 512})
+        assert codigo == 200
+        proceso = servidor.corridas.procesos[r["nombre"]]
+        assert proceso.args[proceso.args.index("--alumna-oculta") + 1] == "512"
+        proceso.terminate()
+        proceso.wait(timeout=30)
 
         # "Superar X" siguiendo un modelo guardado; no se combina con la pista
         objetivo = {"tipo": "superar", "umbral": 900}

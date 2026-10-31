@@ -23,7 +23,7 @@ Contexto para agentes de código (Claude Code y otros) que arrancan una sesión 
   - pestaña Análisis: qué aprendió un modelo (mapas de calor y estadísticas) y comparación de dos modelos.
   - opciones de entrenamiento: horizonte, exploración, tamaño de la red, Pista del Bonus y objetivo ("Máximo puntaje", "Puntos + premio si llega a X" o "Superar X", este último solo siguiendo un modelo) y calentamiento del valor al cambiar de objetivo.
   - "Pensar el turno" (fase 1, solo para jugar y evaluar): en Análisis, Comparar, Jugar y como examen opcional del entrenamiento.
-  - "Aprender pensando" (fase 2, expert iteration): modo de Entrenar, solo desde un modelo entrenado.
+  - "Aprender pensando" (fase 2, expert iteration): modo de Entrenar, solo desde un modelo entrenado. Opción de profesor y alumna: una red nueva más grande aprende de las partidas del profesor y piensa ella cuando lo supera.
 - **Condición de paso de la etapa 4:** superar al codicioso por 100 puntos de promedio. Meta: 950 a 1050 (nivel familia).
 - **Cómo prefiere trabajar Facu:** respuestas cortas, sin jerga, sin tareas manuales de revisión. Quiere ver al modelo aprender, no documentos. Para el análisis prefiere datos (gráficos, estadísticas, mapas de calor), no textos generados ni nada que use APIs de AI.
 

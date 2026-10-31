@@ -14,6 +14,19 @@ Formato:
 
 ---
 
+## 2026-10-31 · Profesor y alumna en Aprender pensando
+
+- **Contexto:** con v5, la red de 256 llega a coincidir con la búsqueda en el 67% de las decisiones y no sube más. Puede ser que a esa red no le alcance el tamaño para copiar lo que hace la búsqueda.
+- **Decisión:** en "Aprender pensando" se puede elegir una **red alumna nueva** (512 o 1024; `--alumna-oculta`). El modelo elegido es el **profesor**: piensa y genera las partidas. La alumna arranca de cero (pesos al azar, 0 partidas) y aprende solo de esas partidas, con los mismos objetivos que antes (política = top 8 de la búsqueda; valor = mezcla de valor de la búsqueda y retorno real).
+  - Al arrancar se examina al profesor sin pensar y pensando (mismas partidas fijas). Esa es la vara. La alumna no tiene examen en el ciclo 0.
+  - **Relevo:** cuando el examen pensando de la alumna supera al del profesor (con el criterio del objetivo del modelo: promedio, premio o % que supera X), desde el ciclo siguiente piensa la alumna. El relevo es definitivo y queda en el estado y en el modelo (`relevo_ciclo`).
+  - Antes del relevo la memoria guarda más ciclos (10 en vez de 3, `--ciclos-memoria-alumna`): las partidas del profesor no se vuelven viejas porque el profesor no cambia, y a una red que empieza de cero le sirven más datos.
+  - Hace falta el examen pensando: sin él no hay cómo decidir el relevo.
+  - El modelo guardado registra al profesor (`entrenamiento.profesor`). Las `pistas` se heredan del profesor, como linaje.
+- **Por qué:** sacar la duda de si el techo es del tamaño de la red. Que la alumna parta de cero evita arrastrar lo que la red chica no pudo aprender. Seguir pensando con el profesor hasta que la alumna lo supere evita que las partidas empeoren mientras ella todavía juega mal.
+- **Sin sesgo humano:** todo sale de la búsqueda y de la red del profesor, que también aprendió sola.
+- **Interfaz:** Entrenar → modo "Aprender pensando" → "Red que aprende". La tarjeta muestra quién piensa y el examen del profesor, y el gráfico agrega sus dos niveles como líneas de referencia.
+
 ## 2026-10-30 · Aprender pensando (fase 2, "expert iteration")
 
 **Contexto:** el examen de v3.0.99 dio 853 sin pensar y 943 pensando (45% llega a 950). Facu quiere que la red aprenda de lo que decide pensando, sin nada humano.

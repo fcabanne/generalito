@@ -236,8 +236,12 @@ class Corridas:
         variedad = 0.15 if variedad in (None, "") else float(variedad)
         if not 0 <= variedad <= 1:
             raise ValueError("La variedad va de 0 a 1.")
+        alumna = int(pedido.get("alumna_oculta") or 0)
+        if alumna not in (0, *TAMANOS_RED):
+            raise ValueError("La red alumna tiene que ser de 256, 512 o 1024.")
         args = [
             "--desde", desde,
+            "--alumna-oculta", str(alumna),
             "--minutos", str(minutos),
             "--hilos", str(int(pedido.get("hilos", d.hilos_cpu))),
             "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
@@ -249,7 +253,13 @@ class Corridas:
             "jugador": "agente",
             "modo": "aprender_pensando",
             "desde": desde,
-            "parametros": {"partidas_ciclo": partidas, "variedad": variedad},
+            "profesor": desde if alumna else None,
+            "alumna_oculta": alumna or None,
+            "parametros": {
+                "partidas_ciclo": partidas,
+                "variedad": variedad,
+                "alumna_oculta": alumna,
+            },
             "limites": {"max_partidas": None, "max_minutos": minutos},
         }
         nombre = datetime.now().strftime("%Y%m%d-%H%M%S-aprender")

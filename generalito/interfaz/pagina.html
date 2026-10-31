@@ -238,6 +238,7 @@
           </div>
         </div>
         <label class="solo-aprender oculto">Partidas por ciclo<input id="e-partidas-ciclo" type="number" value="500" min="10" max="10000" step="50"><span>En cada ciclo juega estas partidas pensando y después aprende de ellas.</span></label>
+        <label class="solo-aprender oculto">Red que aprende<select id="e-alumna"><option value="0">La misma del modelo (sigue aprendiendo)</option><option value="512">Alumna nueva de 512</option><option value="1024">Alumna nueva de 1024</option></select><span>Con alumna: el modelo elegido es el profesor que piensa; la alumna aprende de cero de sus partidas y, cuando lo supera pensando, pasa a pensar ella.</span></label>
         <label class="solo-aprender oculto">Variedad<input id="e-variedad" type="number" value="0.15" min="0" max="1" step="0.05"><span>Cada cuánto, en vez de la mejor jugada, sortea entre las mejores según sus valores (para ver situaciones distintas).</span></label>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
@@ -843,6 +844,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     modo: $("#e-modo").value,
     partidas_ciclo: $("#e-partidas-ciclo").value,
     variedad: $("#e-variedad").value,
+    alumna_oculta: $("#e-alumna").value,
     minutos: +$("#e-minutos").value,
     hilos: +$("#e-hilos").value,
     desde: $("#e-desde").value,
@@ -873,14 +875,14 @@ function tarjetaAprender(c, e) {
   const llegaP = (x) => (x && x.pensando ? `${x.pensando.supera_950_pct}% llega a 950` : "");
   return `<div class="tarjeta">
     <div class="corrida-cab">
-      <div><b>${fecha}</b> · <span class="gris">Aprender pensando, desde ${desde}</span></div>
+      <div><b>${fecha}</b> · <span class="gris">Aprender pensando, ${c.config.alumna_oculta ? `profesor ${desde} y alumna nueva de ${c.config.alumna_oculta}` : `desde ${desde}`}</span></div>
       <div class="fila">
         <span class="estado-pill ${c.situacion}">${estadoTxt}</span>
         ${c.situacion === "corriendo" ? `<button class="boton peligro" data-parar="${c.nombre}">Parar</button>` : ""}
       </div>
     </div>
     <div class="cifras" style="margin-top:10px">
-      <div>Ciclos completos<b>${Math.max(0, ev.length - 1)}</b>${par.partidas_ciclo ?? "–"} partidas por ciclo</div>
+      <div>Ciclos completos<b>${ultimo ? ultimo.ciclo : 0}</b>${par.partidas_ciclo ?? "–"} partidas por ciclo</div>
       <div>Sin pensar<b>${sinPensar(ultimo)}</b>${llega(ultimo)} · empezó en ${sinPensar(primero)}</div>
       <div>Pensando<b>${pensando(ultimo)}</b>${llegaP(ultimo)} · empezó en ${pensando(primero)}</div>
       <div>Coincide con la búsqueda<b>${ap ? ap.coincide_pct + "%" : "–"}</b>de las decisiones (la red sola)</div>
@@ -888,21 +890,24 @@ function tarjetaAprender(c, e) {
       <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
       <div>Datos guardados<b>${e.datos_mb ?? 0} MB</b></div>
       <div>Variedad<b>${par.variedad ?? "–"}</b></div>
+      ${c.config.alumna_oculta ? `<div>Piensa<b>${e.relevo_ciclo ? "la alumna" : "el profesor"}</b>${e.relevo_ciclo ? `desde el ciclo ${e.relevo_ciclo}` : "hasta que la alumna lo supere pensando"}</div>` : ""}
+      ${e.profesor ? `<div>Profesor<b>${e.profesor.promedio} / ${e.profesor.pensando.promedio}</b>sin pensar / pensando (${e.profesor.pensando.supera_950_pct}% llega a 950)</div>` : ""}
     </div>
     ${e.pausa && c.situacion === "corriendo" ? `<p class="chico">⏸ En pausa: ${e.pausa}.</p>` : ""}
     ${e.motivo ? `<p class="gris chico">Por qué terminó: ${e.motivo}.</p>` : ""}
-    ${curvaCiclos(ev, c.nombre)}
+    ${curvaCiclos(ev, c.nombre, e.profesor)}
   </div>`;
 }
 
-function curvaCiclos(ev, id) {
+function curvaCiclos(ev, id, profesor) {
   if (!ev.length) return "";
+  const refs = profesor ? [["profesor pensando", profesor.pensando.promedio], ["profesor sin pensar", profesor.promedio]] : [];
   const W = 700, H = 240, izq = 40, der = CURVA_DER, arr = 10, aba = 26;
   const series = [
     { nombre: "Sin pensar", color: "var(--serie-1)", v: ev.map((x) => x.promedio) },
     { nombre: "Pensando", color: "var(--serie-2)", v: ev.map((x) => (x.pensando ? x.pensando.promedio : null)) },
   ];
-  const todos = [950, ...series.flatMap((s) => s.v.filter((v) => v != null))];
+  const todos = [950, ...refs.map((r) => r[1]), ...series.flatMap((s) => s.v.filter((v) => v != null))];
   const yMin = Math.floor(Math.min(...todos) / 50) * 50 - 50, yMax = Math.ceil(Math.max(...todos) / 50) * 50 + 50;
   const n = Math.max(1, ev.length - 1);
   const X = (i) => izq + (i / n) * (W - izq - der);
@@ -913,7 +918,10 @@ function curvaCiclos(ev, id) {
     svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--borde)"/><text x="${izq - 6}" y="${Y(v) + 4}" text-anchor="end" class="eje">${Math.round(v)}</text>`;
   }
   svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(950)}" y2="${Y(950)}" stroke="var(--texto-3)" stroke-dasharray="4 4" stroke-width="1.5"/><text x="${W - der + 6}" y="${Y(950) + 4}" class="eje">familia 950</text>`;
-  svg += `<text x="${izq}" y="${H - 6}" class="eje">ciclo 0</text><text x="${W - der}" y="${H - 6}" text-anchor="end" class="eje">ciclo ${ev.length - 1}</text>`;
+  for (const [nombre, v] of refs) {
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--texto-2)" stroke-dasharray="2 4" stroke-width="1.5"/><text x="${W - der + 6}" y="${Y(v) + 4}" class="eje">${nombre}</text>`;
+  }
+  svg += `<text x="${izq}" y="${H - 6}" class="eje">ciclo ${ev[0].ciclo}</text><text x="${W - der}" y="${H - 6}" text-anchor="end" class="eje">ciclo ${ev[ev.length - 1].ciclo}</text>`;
   for (const s of series) {
     const pts = s.v.map((v, i) => (v == null ? null : [X(i), Y(v)])).filter(Boolean);
     if (pts.length > 1) svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" points="${pts.map((p) => p.join(",")).join(" ")}"/>`;

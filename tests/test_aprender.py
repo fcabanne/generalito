@@ -98,3 +98,35 @@ def test_retorno_desde_cada_decision(tmp_path):
     # En cada decisión: lo que ya tenía + lo que consiguió después = el total final
     for i in range(ultima + 1):
         assert datos["retorno"][i] * 50 + datos["total_antes"][i] == pytest.approx(total_final)
+
+
+def test_profesor_y_alumna(tmp_path):
+    from generalito.agente.aprender import main as aprender
+
+    profesor = tmp_path / "profesor.pt"
+    guardar_snapshot(Red(16), profesor, {"partidas_entrenadas": 10})
+    carpeta = tmp_path / "a"
+    base = ["--desde", str(profesor), "--carpeta", str(carpeta), "--minutos", "10",
+            "--partidas-ciclo", "4", "--examen-partidas", "6", "--muestras", "4",
+            "--hilos", "2", "--max-cpu", "100"]  # fmt: skip
+    with pytest.raises(SystemExit):
+        aprender([*base, "--alumna-oculta", "32", "--examen-pensando", "0"])
+    aprender([*base, "--alumna-oculta", "32", "--examen-pensando", "3", "--max-ciclos", "2"])
+    estado = json.loads((carpeta / "estado.json").read_text())
+    assert estado["terminado"] and estado["ciclo"] == 2
+    assert estado["profesor"]["oculta"] == 16 and estado["profesor"]["pensando"]["partidas"] == 3
+    # Sin examen inicial: la alumna recién creada no sabe jugar
+    assert [x["ciclo"] for x in estado["evaluaciones"]] == [1, 2]
+    vara = estado["profesor"]["pensando"]
+    relevo = next(
+        (
+            x["ciclo"]
+            for x in estado["evaluaciones"]
+            if x["pensando"]["promedio"] > vara["promedio"]
+        ),
+        None,
+    )
+    assert estado["relevo_ciclo"] == relevo  # pasa a pensar la alumna cuando supera al profesor
+    red, m = cargar_snapshot(carpeta / "modelo.pt")
+    assert red.oculta == 32 and m["partidas_entrenadas"] == 2 * 4  # la alumna empieza de cero
+    assert m["entrenamiento"]["profesor"] == str(profesor)

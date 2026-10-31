@@ -35,6 +35,13 @@ def _argumentos(argv):
     p.add_argument("--partidas-ciclo", type=int, default=500, help="partidas pensando por ciclo")
     p.add_argument("--max-ciclos", type=int, default=0, help="0 = hasta que se acabe el tiempo")
     p.add_argument(
+        "--alumna-oculta",
+        type=int,
+        default=0,
+        help="tamaño de una red alumna nueva que aprende desde cero de las partidas del"
+        " profesor (--desde); 0 = la misma red del profesor sigue aprendiendo",
+    )
+    p.add_argument(
         "--variedad",
         type=float,
         default=0.15,
@@ -51,6 +58,12 @@ def _argumentos(argv):
     p.add_argument("--examen-partidas", type=int, default=500)
     p.add_argument("--examen-pensando", type=int, default=500)
     p.add_argument("--ciclos-memoria", type=int, default=3, help="ciclos con los que se entrena")
+    p.add_argument(
+        "--ciclos-memoria-alumna",
+        type=int,
+        default=10,
+        help="con alumna y antes del relevo, el profesor no cambia: se estudia con más ciclos",
+    )
     p.add_argument("--epocas", type=int, default=2)
     p.add_argument("--minilote", type=int, default=2048)
     p.add_argument("--aprendizaje", type=float, default=3e-4)
@@ -89,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     from generalito.agente.codificacion import VERSION_CODIFICACION, codificar_crudo
     from generalito.agente.entornos import ESCALA_RECOMPENSA
     from generalito.agente.pensar import generar_en_paralelo, jugar_en_paralelo
-    from generalito.agente.red import cargar_snapshot, guardar_snapshot
+    from generalito.agente.red import Red, cargar_snapshot, guardar_snapshot
     from generalito.evaluar import (
         SEMILLA_EVALUACION,
         UMBRAL_REFERENCIA,
@@ -106,6 +119,16 @@ def main(argv: list[str] | None = None) -> int:
     previo = metricas_previas.get("entrenamiento", {})
     objetivo = previo.get("objetivo") or {"tipo": "puntaje"}
     partidas_previas = metricas_previas.get("partidas_entrenadas", 0)
+    # Profesor y alumna: el modelo de --desde piensa y genera las partidas; una red nueva
+    # (de otro tamaño) aprende de ellas desde cero. Cuando la alumna supera al profesor en
+    # el examen pensando, pasa a ser ella la que piensa ("relevo").
+    profesor = red
+    con_alumna = args.alumna_oculta > 0
+    if con_alumna:
+        if args.examen_pensando <= 0:
+            raise SystemExit("Con alumna hace falta el examen pensando (--examen-pensando)")
+        red = Red(args.alumna_oculta)
+        partidas_previas = 0  # la alumna empieza de cero
     pistas = list(metricas_previas.get("pistas", []))
     # La temperatura se da en puntos; la búsqueda trabaja en las unidades de la red
     if objetivo.get("tipo") == "superar":
@@ -123,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
         "modo": "aprender_pensando",
         "desde": str(args.desde),
         "objetivo": objetivo,
+        "profesor": str(args.desde) if con_alumna else None,
+        "alumna_oculta": red.oculta if con_alumna else None,
         "version_reglas": VERSION_REGLAS,
         "version_codificacion": VERSION_CODIFICACION,
         "parametros": {
@@ -146,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
         "terminado": False,
         "motivo": None,
         "etapa": "Examen inicial",
+        "profesor": None,  # su examen (solo con alumna)
+        "relevo_ciclo": None,  # ciclo en que la alumna pasó a ser la que piensa
     }
     memoria: list[dict] = []
     mejor = -float("inf")
@@ -186,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
                 "entropia": previo.get("entropia"),
                 "variedad": args.variedad,
                 "muestras": args.muestras,
+                "profesor": str(args.desde) if con_alumna else None,
+                "relevo_ciclo": estado["relevo_ciclo"],
                 "pista": None,
             },
             "pistas": pistas,
@@ -209,7 +238,36 @@ def main(argv: list[str] | None = None) -> int:
 
         return al_avanzar
 
-    def examen() -> None:
+    def examen_profesor() -> float:
+        """Examen del profesor (sin pensar y pensando): la vara que tiene que superar la alumna."""
+        estado["etapa"] = "Examen del profesor"
+        escribir()
+        sin_pensar = evaluar_agente(profesor, args.examen_partidas)
+        spec = {"ruta": str(args.desde), "pensar": True, "muestras": args.muestras}
+        n = args.examen_pensando
+        resultados = jugar_en_paralelo(
+            spec, None, n, SEMILLA_EVALUACION, limites.hilos_cpu,
+            progreso_generando("Examen pensando del profesor", n),
+        )  # fmt: skip
+        pensando = [r["total"] for r in resultados]
+        estado["profesor"] = {
+            "oculta": profesor.oculta,
+            "promedio": round(statistics.fmean(sin_pensar), 1),
+            "supera_950_pct": porcentaje_que_supera(sin_pensar, UMBRAL_REFERENCIA),
+            "pensando": {
+                "partidas": n,
+                "promedio": round(statistics.fmean(pensando), 1),
+                "supera_950_pct": porcentaje_que_supera(pensando, UMBRAL_REFERENCIA),
+            },
+        }
+        print(
+            f"Profesor: sin pensar {estado['profesor']['promedio']} · pensando "
+            f"{estado['profesor']['pensando']['promedio']}",
+            flush=True,
+        )
+        return puntaje_objetivo(pensando)
+
+    def examen() -> float:
         nonlocal mejor
         estado["etapa"] = "Examen sin pensar"
         escribir()
@@ -256,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             f" ({pens.get('supera_950_pct')}%)",
             flush=True,
         )
+        return valor
 
     def guardar_datos(partidas: list[dict]) -> dict:
         """Junta las partidas del ciclo, calcula lo que se consiguió desde cada decisión y
@@ -355,7 +414,10 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     try:
-        examen()  # punto de partida (ciclo 0)
+        if con_alumna:
+            vara = examen_profesor()  # la alumna recién creada no sabe jugar: no se examina
+        else:
+            examen()  # punto de partida (ciclo 0)
         escribir()
         motivo = guardian.revisar(0)
         while motivo is None:
@@ -363,7 +425,10 @@ def main(argv: list[str] | None = None) -> int:
             inicio = time.perf_counter()
             ruta_ciclo = carpeta / "redes" / f"ciclo_{estado['ciclo']:04d}.pt"
             guardar_snapshot(red, ruta_ciclo, metricas())
-            spec = {"ruta": str(ruta_ciclo), "pensar": True, "muestras": args.muestras}
+            # Piensa el profesor hasta el relevo; después, la red que aprende
+            piensa = args.desde if con_alumna and estado["relevo_ciclo"] is None else ruta_ciclo
+            spec = {"ruta": str(piensa), "pensar": True, "muestras": args.muestras}
+            estado["piensa"] = "profesor" if piensa == args.desde else "la red que aprende"
             partidas = generar_en_paralelo(
                 spec,
                 args.partidas_ciclo,
@@ -377,14 +442,20 @@ def main(argv: list[str] | None = None) -> int:
             estado["partidas_totales"] = partidas_previas + estado["partidas"]
             estado["promedio_generadas"] = round(statistics.fmean(p["total"] for p in partidas), 1)
             memoria.append(guardar_datos(partidas))
-            del memoria[: -args.ciclos_memoria]
+            antes_del_relevo = con_alumna and estado["relevo_ciclo"] is None
+            del memoria[
+                : -(args.ciclos_memoria_alumna if antes_del_relevo else args.ciclos_memoria)
+            ]
             estado["etapa"] = "Aprendiendo de lo que pensó"
             escribir()
             resumen = aprender()
             resumen["segundos"] = round(time.perf_counter() - inicio, 1)
             resumen["promedio_generadas"] = estado["promedio_generadas"]
             estado["aprendizaje"].append(resumen)
-            examen()
+            valor = examen()
+            if con_alumna and estado["relevo_ciclo"] is None and valor > vara:
+                estado["relevo_ciclo"] = estado["ciclo"]
+                print(f"Relevo: la alumna superó al profesor en el ciclo {estado['ciclo']}")
             # Solo se guardan las redes de los últimos 2 ciclos (las otras ya no hacen falta)
             for vieja in sorted((carpeta / "redes").glob("ciclo_*.pt"))[:-2]:
                 vieja.unlink()
