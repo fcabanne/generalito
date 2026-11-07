@@ -14,6 +14,12 @@ Formato:
 
 ---
 
+## 2026-11-07 · Los procesos que juegan en paralelo no cargan PyTorch
+
+- **Contexto:** "Aprender pensando" con profesor v5 y alumna de 512 se frenó en el primer ciclo por pasar 4096 MB de RAM. Medido por etapa: cada proceso que juega en paralelo cargaba PyTorch y ocupaba unos 550 MB, casi todo la librería y no la red. Con 4 procesos el total llegaba a ~2900 MB, y con más procesos se pasaba de 4096 MB. Con la red de 256 quedaba justo abajo del límite; la alumna (dos redes, una más grande) sumó lo poco que faltaba. La memoria de 10 ciclos no era el problema: son unos 11 MB por ciclo de 500 partidas.
+- **Decisión:** esos procesos calculan la red con NumPy (`RedNumpy` en `pensar.py`, la misma cuenta que `Red`). El proceso principal lee el modelo una vez y les pasa los pesos al arrancar. Cada proceso usa un solo hilo de cálculo.
+- **Resultado medido (4 procesos, alumna de 512):** pico de ~2980 MB → ~1100 MB; cada proceso pasa de ~550 MB a ~85 MB. Misma velocidad pensando (0.64 contra 0.61 s por partida) y mismas jugadas: un test verifica que los dos cálculos coinciden y otro que los procesos no cargan PyTorch.
+
 ## 2026-10-31 · Profesor y alumna en Aprender pensando
 
 - **Contexto:** con v5, la red de 256 llega a coincidir con la búsqueda en el 67% de las decisiones y no sube más. Puede ser que a esa red no le alcance el tamaño para copiar lo que hace la búsqueda.

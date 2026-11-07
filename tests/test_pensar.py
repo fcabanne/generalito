@@ -131,3 +131,41 @@ def test_examen_pensando_en_el_entrenamiento(tmp_path):
     examen = json.loads((carpeta / "estado.json").read_text())["evaluaciones"][-1]
     assert examen["pensando"]["partidas"] == 3
     assert "sin_pensar_mismas" in examen["pensando"]
+
+
+def test_red_numpy_igual_a_la_de_pytorch():
+    from generalito.agente.codificacion import codificar
+    from generalito.agente.pensar import RedNumpy
+
+    red = Red(32)
+    partida = Partida(FuenteAzar(3))
+    x = codificar(partida)
+    mascara = torch.tensor(partida.mascara_legal()).unsqueeze(0)
+    with torch.no_grad():
+        logits, v = red(torch.from_numpy(x).unsqueeze(0), mascara)
+    rn = RedNumpy.desde(red)
+    h = rn.tronco(x[None])
+    assert np.allclose(rn.valor(h), v.numpy(), atol=1e-5)
+    legal = mascara[0].numpy()
+    assert np.allclose(rn.logits(h)[0][legal], logits[0].numpy()[legal], atol=1e-5)
+
+
+def test_los_trabajadores_no_cargan_pytorch(tmp_path):
+    """Cada proceso con PyTorch ocupa ~500 MB: los que juegan en paralelo no lo cargan."""
+    import psutil
+
+    ruta = tmp_path / "m.pt"
+    guardar_snapshot(Red(16), ruta, {})
+    con_torch = []
+
+    def al_avanzar(_hechas):
+        for hijo in psutil.Process().children(recursive=True):
+            try:
+                mapas = hijo.memory_maps()
+            except psutil.Error:
+                continue
+            con_torch.append(any("torch" in m.path for m in mapas))
+
+    spec = {"ruta": str(ruta), "pensar": False}
+    jugar_en_paralelo(spec, None, 8, 1, trabajadores=2, al_avanzar=al_avanzar)
+    assert con_torch and not any(con_torch)

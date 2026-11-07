@@ -97,7 +97,7 @@ generalito/
     entrenar.py         comando generalito-entrenar (PPO)
     entornos.py         partidas en paralelo (varios procesos) y recompensa por paso
     pista.py            Pista del Bonus (única excepción de shaping, apagada por defecto)
-    pensar.py           pensar el turno: expectimax exacto del turno + valor de la red (solo para jugar/evaluar)
+    pensar.py           pensar el turno: expectimax exacto del turno + valor de la red con NumPy (los procesos en paralelo no cargan PyTorch)
     aprender.py         comando generalito-aprender: Aprender pensando (la red imita a la búsqueda)
   interfaz/             interfaz local en el navegador (comando generalito)
     servidor.py         servidor HTTP de la biblioteca estándar, solo en 127.0.0.1

@@ -15,6 +15,9 @@ Solo usa las reglas y la red del modelo (nada de heurísticas humanas):
    con el que se entrenó el modelo) + lo que la red estima que falta.
 
 Solo sirve para jugar y evaluar: no entrena (fase 1, ver DECISIONES.md).
+
+La red se calcula con NumPy (`RedNumpy`): así los procesos que juegan en paralelo
+no cargan PyTorch, que ocupa unos 500 MB de RAM en cada uno.
 """
 
 import threading
@@ -23,9 +26,8 @@ from itertools import combinations, combinations_with_replacement
 from math import factorial, prod
 
 import numpy as np
-import torch
 
-from generalito.agente.codificacion import TAMANO_ESTADO, codificar_lote
+from generalito.agente.codificacion import TAMANO_ESTADO, codificar, codificar_lote
 from generalito.agente.entornos import ESCALA_RECOMPENSA
 from generalito.motor import Partida
 from generalito.motor.categorias import Categoria, puntaje
@@ -33,6 +35,45 @@ from generalito.motor.jugadas import anotar, volver_a_tirar
 from generalito.motor.planilla import LIBRE, Columna, Planilla, indice_casilla
 
 MUESTRAS_DEFECTO = 32
+
+
+class RedNumpy:
+    """La misma cuenta que `Red` (red.py), con NumPy y sin PyTorch. Solo para jugar."""
+
+    def __init__(self, pesos: dict[str, np.ndarray]) -> None:
+        self.pesos = {k: np.ascontiguousarray(v, dtype=np.float32) for k, v in pesos.items()}
+        self.oculta = self.pesos["tronco.0.bias"].shape[0]
+
+    @classmethod
+    def desde(cls, red) -> "RedNumpy":
+        """Copia los pesos de una `Red` de PyTorch."""
+        if isinstance(red, RedNumpy):
+            return red
+        return cls({k: v.detach().cpu().numpy() for k, v in red.state_dict().items()})
+
+    def _capa(self, x: np.ndarray, nombre: str) -> np.ndarray:
+        return x @ self.pesos[f"{nombre}.weight"].T + self.pesos[f"{nombre}.bias"]
+
+    def tronco(self, x: np.ndarray) -> np.ndarray:
+        h = np.maximum(self._capa(x, "tronco.0"), 0)
+        return np.maximum(self._capa(h, "tronco.2"), 0)
+
+    def valor(self, h: np.ndarray) -> np.ndarray:
+        return self._capa(h, "valor")[..., 0]
+
+    def logits(self, h: np.ndarray) -> np.ndarray:
+        return self._capa(h, "politica")
+
+
+def cargar_numpy(ruta) -> tuple[RedNumpy, dict]:
+    """Lee un modelo guardado (necesita PyTorch: se usa en el proceso principal)."""
+    from pathlib import Path
+
+    from generalito.agente.red import cargar_snapshot
+
+    red, metricas = cargar_snapshot(Path(ruta))
+    return RedNumpy.desde(red), metricas
+
 
 # --- Tablas fijas de dados (se calculan una vez) ---
 
@@ -92,6 +133,7 @@ class Pensador:
     def __init__(self, red, objetivo: dict | None = None, muestras: int = MUESTRAS_DEFECTO,
                  semilla: int = 0) -> None:  # fmt: skip
         self.red = red
+        self._red = RedNumpy.desde(red)
         self.objetivo = objetivo or {"tipo": "puntaje"}
         self.muestras = muestras
         self.semilla = semilla
@@ -101,7 +143,6 @@ class Pensador:
 
     # --- Valor de una planilla al terminar el turno ---
 
-    @torch.no_grad()
     def _valor_siguiente(self, casillas: np.ndarray, turno: int) -> np.ndarray:
         """Lo que la red estima que falta, al empezar el turno `turno`, para cada planilla."""
         if self.muestras <= 0:
@@ -111,8 +152,7 @@ class Pensador:
             dados = rng.integers(1, 7, size=(self.muestras, 5))
             pesos = np.full(self.muestras, 1 / self.muestras)
         x = codificar_lote(casillas, dados, tiro=1, servido=True, turno=turno)
-        lote = torch.from_numpy(x.reshape(-1, TAMANO_ESTADO))
-        v = self.red.valor(self.red.tronco(lote)).squeeze(-1).numpy()
+        v = self._red.valor(self._red.tronco(x.reshape(-1, TAMANO_ESTADO)))
         return v.reshape(len(casillas), len(dados)) @ pesos
 
     def _recompensa(self, total_antes: int, total_despues: int, completa: bool) -> float:
@@ -236,26 +276,29 @@ class JugadorRed:
 
     def __init__(self, red) -> None:
         self.red = red
+        self._red = RedNumpy.desde(red)
 
     def elegir(self, partida: Partida) -> int:
-        from generalito.agente.red import elegir
-
-        return elegir(self.red, partida)
+        logits = self._red.logits(self._red.tronco(codificar(partida)))
+        return int(np.argmax(np.where(partida.mascara_legal(), logits, -np.inf)))
 
 
 def crear_jugador(spec: dict):
     """spec: {"ruta": modelo .pt, "pensar": bool, "muestras": int}."""
-    from generalito.agente.red import cargar_snapshot
-
-    red, metricas = cargar_snapshot(spec["ruta"])
+    cargado = _CARGADOS.get(str(spec["ruta"]))
+    red, metricas = cargado if cargado else cargar_numpy(spec["ruta"])
     if not spec.get("pensar"):
         return JugadorRed(red)
     objetivo = (metricas or {}).get("entrenamiento", {}).get("objetivo")
     return Pensador(red, objetivo, muestras=spec.get("muestras", MUESTRAS_DEFECTO))
 
 
-def _iniciar_trabajador() -> None:
-    torch.set_num_threads(1)
+# Modelos que el proceso principal ya leyó y les pasa a los trabajadores (ruta → red, métricas)
+_CARGADOS: dict = {}
+
+
+def _iniciar_trabajador(cargados: dict) -> None:
+    _CARGADOS.update(cargados)
     try:
         import psutil
 
@@ -315,11 +358,14 @@ def _jugar_varias(datos) -> list[dict]:
     return [jugar_partida(spec, otra, i, semilla) for i in indices]
 
 
-def _en_paralelo(funcion, lotes: list, trabajadores: int, al_avanzar=None) -> list[dict]:
+def _en_paralelo(funcion, lotes: list, trabajadores: int, al_avanzar=None,
+                 specs: tuple = ()) -> list[dict]:  # fmt: skip
     """Corre `funcion(lote)` (que devuelve una lista) para cada lote, en `trabajadores`
     procesos con prioridad baja. `al_avanzar(hechas)` se llama a medida que terminan;
-    si devuelve un motivo, se corta todo (InterruptedError)."""
+    si devuelve un motivo, se corta todo (InterruptedError). Los modelos de `specs` se
+    leen una vez acá y se les pasan a los trabajadores, que así no cargan PyTorch."""
     import multiprocessing as mp
+    import os
 
     resultados: list[dict] = []
     if trabajadores <= 1:
@@ -328,8 +374,21 @@ def _en_paralelo(funcion, lotes: list, trabajadores: int, al_avanzar=None) -> li
             if al_avanzar and (motivo := al_avanzar(len(resultados))):
                 raise InterruptedError(motivo)
         return resultados
+    cargados = {str(s["ruta"]): cargar_numpy(s["ruta"]) for s in specs if s}
     contexto = mp.get_context("spawn")
-    with contexto.Pool(trabajadores, initializer=_iniciar_trabajador) as pool:
+    # Un hilo de cálculo por trabajador (los procesos nuevos heredan estas variables)
+    hilos = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+    antes = {k: os.environ.get(k) for k in hilos}
+    os.environ.update(dict.fromkeys(hilos, "1"))
+    try:
+        pool = contexto.Pool(trabajadores, initializer=_iniciar_trabajador, initargs=(cargados,))
+    finally:
+        for k, v in antes.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    with pool:
         try:
             for parte in pool.imap_unordered(funcion, lotes):
                 resultados.extend(parte)
@@ -356,7 +415,7 @@ def jugar_en_paralelo(
 ) -> list[dict]:
     """Juega `partidas` partidas (dados reservados) en `trabajadores` procesos."""
     lotes = [(spec, otra, indices, semilla) for indices in _lotes(partidas, trabajadores)]
-    resultados = _en_paralelo(_jugar_varias, lotes, trabajadores, al_avanzar)
+    resultados = _en_paralelo(_jugar_varias, lotes, trabajadores, al_avanzar, (spec, otra))
     return sorted(resultados, key=lambda r: r["indice"])
 
 
@@ -465,5 +524,5 @@ def generar_en_paralelo(
         (spec, indices, semilla, variedad, temperatura)
         for indices in _lotes(partidas, trabajadores)
     ]
-    resultados = _en_paralelo(_generar_varias, lotes, trabajadores, al_avanzar)
+    resultados = _en_paralelo(_generar_varias, lotes, trabajadores, al_avanzar, (spec,))
     return sorted(resultados, key=lambda r: r["indice"])
