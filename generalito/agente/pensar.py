@@ -27,7 +27,7 @@ from math import factorial, prod
 
 import numpy as np
 
-from generalito.agente.codificacion import TAMANO_ESTADO, codificar, codificar_lote
+from generalito.agente.codificacion import codificar, codificar_lote
 from generalito.agente.entornos import ESCALA_RECOMPENSA
 from generalito.motor import Partida
 from generalito.motor.categorias import Categoria, puntaje
@@ -35,6 +35,7 @@ from generalito.motor.jugadas import anotar, volver_a_tirar
 from generalito.motor.planilla import LIBRE, Columna, Planilla, indice_casilla
 
 MUESTRAS_DEFECTO = 32
+FILAS_POR_BLOQUE = 8192  # planillas × tiradas que se evalúan juntas (acota la RAM)
 
 
 class RedNumpy:
@@ -57,6 +58,16 @@ class RedNumpy:
     def tronco(self, x: np.ndarray) -> np.ndarray:
         h = np.maximum(self._capa(x, "tronco.0"), 0)
         return np.maximum(self._capa(h, "tronco.2"), 0)
+
+    def primera_capa(self, x: np.ndarray, con_sesgo: bool = True) -> np.ndarray:
+        """La primera capa antes del ReLU. Es lineal: se puede sumar por partes."""
+        w = x @ self.pesos["tronco.0.weight"].T
+        return w + self.pesos["tronco.0.bias"] if con_sesgo else w
+
+    def desde_primera_capa(self, z: np.ndarray) -> np.ndarray:
+        """Valor a partir de la primera capa (antes del ReLU)."""
+        h = np.maximum(self._capa(np.maximum(z, 0), "tronco.2"), 0)
+        return self.valor(h)
 
     def valor(self, h: np.ndarray) -> np.ndarray:
         return self._capa(h, "valor")[..., 0]
@@ -151,9 +162,22 @@ class Pensador:
             rng = np.random.default_rng([self.semilla, turno])
             dados = rng.integers(1, 7, size=(self.muestras, 5))
             pesos = np.full(self.muestras, 1 / self.muestras)
-        x = codificar_lote(casillas, dados, tiro=1, servido=True, turno=turno)
-        v = self._red.valor(self._red.tronco(x.reshape(-1, TAMANO_ESTADO)))
-        return v.reshape(len(casillas), len(dados)) @ pesos
+        # Entre una tirada y otra solo cambia la parte de los dados de la entrada, y la
+        # primera capa es lineal: se calcula una vez por planilla y una vez por tirada,
+        # y se suman. Después se avanza por bloques para no armar todo junto en memoria.
+        red = self._red
+        base = red.primera_capa(
+            codificar_lote(casillas, dados[:1], tiro=1, servido=True, turno=turno)[:, 0]
+        )  # (L, H): cada planilla con la primera tirada
+        x_dados = codificar_lote(casillas[:1], dados, tiro=1, servido=True, turno=turno)[0]
+        cambio = red.primera_capa(x_dados - x_dados[0], con_sesgo=False)  # (K, H)
+        resultado = np.empty(len(casillas))
+        paso = max(1, FILAS_POR_BLOQUE // len(dados))
+        for i in range(0, len(casillas), paso):
+            z = base[i : i + paso, None, :] + cambio[None, :, :]  # (bloque, K, H)
+            v = red.desde_primera_capa(z.reshape(-1, z.shape[-1]))
+            resultado[i : i + paso] = v.reshape(-1, len(dados)) @ pesos
+        return resultado
 
     def _recompensa(self, total_antes: int, total_despues: int, completa: bool) -> float:
         """Lo que gana con una anotación, en las mismas unidades que la red."""

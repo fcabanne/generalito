@@ -239,6 +239,7 @@
         </div>
         <label class="solo-aprender oculto">Partidas por ciclo<input id="e-partidas-ciclo" type="number" value="500" min="10" max="10000" step="50"><span>En cada ciclo juega estas partidas pensando y después aprende de ellas.</span></label>
         <label class="solo-aprender oculto">Red que aprende<select id="e-alumna"><option value="0">La misma del modelo (sigue aprendiendo)</option><option value="512">Alumna nueva de 512</option><option value="1024">Alumna nueva de 1024</option></select><span>Con alumna: el modelo elegido es el profesor que piensa; la alumna aprende de cero de sus partidas y, cuando lo supera pensando, pasa a pensar ella.</span></label>
+        <label class="solo-aprender oculto">Tiradas que imagina al pensar<select id="e-muestras"><option value="32">32 al azar (más rápido)</option><option value="0">Todas las 252 (exacto, más lento)</option></select><span>Para ver cómo queda la planilla: 32 primeras tiradas al azar del turno siguiente, o las 252 combinaciones con su probabilidad exacta (unas 6 veces más lento por partida).</span></label>
         <label class="solo-aprender oculto">Variedad<input id="e-variedad" type="number" value="0.15" min="0" max="1" step="0.05"><span>Cada cuánto, en vez de la mejor jugada, sortea entre las mejores según sus valores (para ver situaciones distintas).</span></label>
         <label>Empezar desde<select id="e-desde"></select><span>Un modelo ya entrenado sigue aprendiendo desde donde quedó.</span></label>
       </div>
@@ -278,7 +279,8 @@
         <div class="tarjeta" id="t-modelo">
           <h3>El modelo</h3>
           <div class="fila chico" style="margin-bottom:8px">Juega: <select id="j-modelo"></select>
-            <label><input type="checkbox" id="j-pensar"> Pensar el turno</label></div>
+            <label><input type="checkbox" id="j-pensar"> Pensar el turno</label>
+            <label title="Tiradas que imagina al pensar">Tiradas <select id="j-muestras"><option value="32">32 al azar (más rápido)</option><option value="0">Todas las 252 (exacto, más lento)</option></select></label></div>
           <div id="sugerencia" class="chico"></div>
           <div class="fila" style="margin-top:8px">
             <button class="boton" data-modelo="jugada">Que haga una jugada</button>
@@ -331,6 +333,7 @@
         <p class="gris chico">El modelo juega 2.000 partidas (500 si piensa) y se cuenta cada decisión.</p>
         <div class="fila"><select id="a-modelo"></select>
           <label class="check"><input type="checkbox" id="a-pensar"> Pensar el turno</label>
+          <label class="check" title="Tiradas que imagina al pensar">Tiradas <select id="a-muestras"><option value="32">32 al azar (más rápido)</option><option value="0">Todas las 252 (exacto, más lento)</option></select></label>
           <button class="boton principal" id="b-analizar">Analizar</button>
           <button class="boton" id="b-examen-pensando" title="Las 500 partidas fijas del examen, sin pensar y pensando">Examen: sin pensar vs pensando</button></div>
       </div>
@@ -340,8 +343,9 @@
         <div class="fila"><select id="c-a"></select><label class="check"><input type="checkbox" id="c-a-pensar"> piensa</label>
           <span class="gris">contra</span>
           <select id="c-b"></select><label class="check"><input type="checkbox" id="c-b-pensar"> piensa</label>
+          <label class="check" title="Tiradas que imagina al pensar">Tiradas <select id="c-muestras"><option value="32">32 al azar (más rápido)</option><option value="0">Todas las 252 (exacto, más lento)</option></select></label>
           <button class="boton principal" id="b-comparar">Comparar</button></div>
-        <p class="gris chico" style="margin:6px 0 0">Pensar el turno: en cada decisión prueba todas las opciones del turno con las probabilidades exactas de los dados y evalúa cómo queda la planilla con su propia red. Es mucho más lento.</p>
+        <p class="gris chico" style="margin:6px 0 0">Pensar el turno: en cada decisión prueba todas las opciones del turno con las probabilidades exactas de los dados y evalúa cómo queda la planilla con su propia red. Es mucho más lento. “Tiradas que imagina al pensar”: para ver cómo queda la planilla promedia 32 primeras tiradas al azar del turno siguiente, o todas las 252 combinaciones con su probabilidad exacta (unas 6 veces más lento).</p>
       </div>
     </div>
     <div id="analisis"></div>
@@ -485,7 +489,7 @@ async function pintarSugerencia() {
   try {
     const pensando = $("#j-pensar").checked;
     if (pensando) caja.innerHTML = `<span class="gris">Pensando…</span>`;
-    const s = await api("GET", `/api/partidas/${partida.id}/sugerencia${pensando ? "?pensar=1" : ""}`);
+    const s = await api("GET", `/api/partidas/${partida.id}/sugerencia${pensando ? `?pensar=1&muestras=${$("#j-muestras").value}` : ""}`);
     hayModelo = s.modelo !== undefined || s.opciones.length > 0;
     if (!hayModelo) {
       caja.innerHTML = `<span class="gris">Todavía no hay un modelo entrenado.</span>`;
@@ -505,10 +509,11 @@ async function pintarSugerencia() {
 }
 
 $("#j-pensar").addEventListener("change", pintarSugerencia);
+$("#j-muestras").addEventListener("change", () => { if ($("#j-pensar").checked) pintarSugerencia(); });
 
 document.querySelectorAll("[data-modelo]").forEach((b) =>
   b.addEventListener("click", () => accion(async () =>
-    pintarPartida(await api("POST", `/api/partidas/${partida.id}/modelo`, { hasta: b.dataset.modelo, pensar: $("#j-pensar").checked }))
+    pintarPartida(await api("POST", `/api/partidas/${partida.id}/modelo`, { hasta: b.dataset.modelo, pensar: $("#j-pensar").checked, muestras: $("#j-muestras").value }))
   ))
 );
 
@@ -844,6 +849,7 @@ $("#b-entrenar").addEventListener("click", () => accion(async () => {
     modo: $("#e-modo").value,
     partidas_ciclo: $("#e-partidas-ciclo").value,
     variedad: $("#e-variedad").value,
+    muestras: $("#e-muestras").value,
     alumna_oculta: $("#e-alumna").value,
     minutos: +$("#e-minutos").value,
     hilos: +$("#e-hilos").value,
@@ -890,6 +896,7 @@ function tarjetaAprender(c, e) {
       <div>Tiempo<b>${r.minutos ?? "–"} min</b>máx. ${c.config.limites.max_minutos}</div>
       <div>Datos guardados<b>${e.datos_mb ?? 0} MB</b></div>
       <div>Variedad<b>${par.variedad ?? "–"}</b></div>
+      <div>Tiradas al pensar<b>${par.muestras === 0 ? "252" : (par.muestras ?? 32)}</b>${par.muestras === 0 ? "exactas" : "al azar"}</div>
       ${c.config.alumna_oculta ? `<div>Piensa<b>${e.relevo_ciclo ? "la alumna" : "el profesor"}</b>${e.relevo_ciclo ? `desde el ciclo ${e.relevo_ciclo}` : "hasta que la alumna lo supere pensando"}</div>` : ""}
       ${e.profesor ? `<div>Profesor<b>${e.profesor.promedio} / ${e.profesor.pensando.promedio}</b>sin pensar / pensando (${e.profesor.pensando.supera_950_pct}% llega a 950)</div>` : ""}
     </div>
@@ -1152,7 +1159,7 @@ function tarjetaAnalisis(c) {
       <div>Promedio<b>${r.promedio}</b>puntos</div><div>Variación típica<b>±${r.desvio}</b></div>
       <div>Mejor partida<b>${r.maximo}</b></div><div>Peor partida<b>${r.minimo}</b></div>
       <div>Anota puntos en Servida<b>${r.servida_con_puntaje_pct}%</b>de sus casillas</div>
-      ${r.segundos_por_partida != null ? `<div>Tiempo<b>${segundos(r.segundos_por_partida)}</b>por partida${r.pensar ? " (pensando)" : ""}</div>` : ""}
+      ${r.segundos_por_partida != null ? `<div>Tiempo<b>${segundos(r.segundos_por_partida)}</b>por partida${r.pensar ? ` (pensando, ${c.config.muestras === 0 ? "252 tiradas exactas" : "32 tiradas"})` : ""}</div>` : ""}
       ${(r.supera || []).map((u) => `<div>Llega a ${u.umbral}<b>${u.pct}%</b>de las partidas</div>`).join("")}</div>`;
     html += mapaDeCalor(r, c.nombre);
     if (r.tachada_por_tiro) html += tachadasPorTiro(r);
@@ -1209,12 +1216,12 @@ async function refrescarAnalisis(forzar = false) {
 }
 
 $("#b-analizar").addEventListener("click", () => accion(async () => {
-  await api("POST", "/api/analisis", { tipo: "analizar", modelos: [$("#a-modelo").value], pensar: [$("#a-pensar").checked] });
+  await api("POST", "/api/analisis", { tipo: "analizar", modelos: [$("#a-modelo").value], pensar: [$("#a-pensar").checked], muestras: $("#a-muestras").value });
   setTimeout(refrescarAnalisis, 800);
 }));
 $("#b-examen-pensando").addEventListener("click", () => accion(async () => {
   const m = $("#a-modelo").value;
-  await api("POST", "/api/analisis", { tipo: "comparar", modelos: [m, m], pensar: [false, true], examen: true });
+  await api("POST", "/api/analisis", { tipo: "comparar", modelos: [m, m], pensar: [false, true], examen: true, muestras: $("#a-muestras").value });
   setTimeout(refrescarAnalisis, 800);
 }));
 $("#b-comparar").addEventListener("click", () => accion(async () => {
@@ -1222,6 +1229,7 @@ $("#b-comparar").addEventListener("click", () => accion(async () => {
     tipo: "comparar",
     modelos: [$("#c-a").value, $("#c-b").value],
     pensar: [$("#c-a-pensar").checked, $("#c-b-pensar").checked],
+    muestras: $("#c-muestras").value,
   });
   setTimeout(refrescarAnalisis, 800);
 }));

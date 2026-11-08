@@ -14,6 +14,17 @@ Formato:
 
 ---
 
+## 2026-11-08 · Pensar con las 252 tiradas exactas (opción "Tiradas que imagina al pensar")
+
+- **Contexto:** al pensar, cómo queda la planilla se mide con la red promediando la primera tirada del turno siguiente: 32 tiradas al azar o, con `muestras=0`, las 252 combinaciones con su probabilidad exacta. Con 252, el examen de modelo-v6 (500 partidas, 16 procesos) se frenó a los 7 minutos por pasar 4096 MB: `_valor_siguiente` armaba de una vez hojas × 252 filas en cada proceso (~220 MB más por proceso).
+- **Decisión:**
+  - `_valor_siguiente` calcula por bloques de hasta 8192 filas. Además, entre una tirada y otra solo cambia la parte de los dados de la entrada, y la primera capa de la red es lineal: se calcula una vez por planilla y una vez por tirada, y se suman. Da el mismo resultado (test contra el cálculo directo, con 32 y con 252) y es más rápido.
+  - Opción "Tiradas que imagina al pensar": "32 al azar (más rápido)" o "Todas las 252 (exacto, más lento)", en Aprender pensando (se pasa `--muestras`), Análisis, Comparar y Jugar. Queda guardada en el modelo (`entrenamiento.muestras`) y en la corrida.
+- **Medido acá** (4 procesos, un modelo de 256 que piensa ~905; modelo-v6 no está en este equipo):
+  - Memoria por proceso con 252, en una partida: de ~735 MB a ~525 MB de pico, igual que con 32. El examen completo con 252 usa lo mismo que con 32 (~820 MB en total).
+  - Tiempo por partida: 32 tiradas 0.78 → 0.52 s; 252 tiradas 5.63 → 3.34 s. Con 252 es unas 5 a 6 veces más lento que con 32.
+  - Examen de 500 partidas pensando: 906.6 con 32 (30.8% llega a 950) y 903.2 con 252 (30.2%). En este modelo, imaginar las 252 no mejora: el error de 32 tiradas al azar es chico frente al error de la propia red. Falta medirlo con modelo-v6 y ver si entrenar Aprender pensando con 252 cambia algo.
+
 ## 2026-11-07 · Los procesos que juegan en paralelo no cargan PyTorch
 
 - **Contexto:** "Aprender pensando" con profesor v5 y alumna de 512 se frenó en el primer ciclo por pasar 4096 MB de RAM. Medido por etapa: cada proceso que juega en paralelo cargaba PyTorch y ocupaba unos 550 MB, casi todo la librería y no la red. Con 4 procesos el total llegaba a ~2900 MB, y con más procesos se pasaba de 4096 MB. Con la red de 256 quedaba justo abajo del límite; la alumna (dos redes, una más grande) sumó lo poco que faltaba. La memoria de 10 ciclos no era el problema: son unos 11 MB por ciclo de 500 partidas.

@@ -105,7 +105,7 @@ def test_examen_sin_pensar_vs_pensando(tmp_path):
     guardar_snapshot(Red(16), ruta, {})
     carpeta = tmp_path / "x"
     analisis(["comparar", "--modelo", str(ruta), "--modelo", str(ruta), "--pensar", "no",
-              "--pensar", "si", "--examen", "--partidas", "4", "--muestras", "4", "--hilos", "2",
+              "--pensar", "si", "--examen", "--partidas", "4", "--muestras", "0", "--hilos", "2",
               "--carpeta", str(carpeta), "--max-cpu", "100"])  # fmt: skip
     estado = json.loads((carpeta / "estado.json").read_text())
     r = estado["resultado"]
@@ -169,3 +169,29 @@ def test_los_trabajadores_no_cargan_pytorch(tmp_path):
     spec = {"ruta": str(ruta), "pensar": False}
     jugar_en_paralelo(spec, None, 8, 1, trabajadores=2, al_avanzar=al_avanzar)
     assert con_torch and not any(con_torch)
+
+
+@pytest.mark.parametrize("muestras", [0, 32])
+def test_valor_por_bloques_igual_al_directo(monkeypatch, muestras):
+    """El valor de las planillas por partes y por bloques da lo mismo que armarlo todo junto."""
+    import generalito.agente.pensar as pensar
+    from generalito.agente.codificacion import TAMANO_ESTADO, codificar_lote
+
+    pensador = Pensador(Red(32), muestras=muestras)
+    partida = Partida(FuenteAzar(4))
+    casillas = np.tile(np.array(partida.planilla.casillas), (40, 1))
+    casillas[np.arange(40), np.arange(40)] = np.arange(40) % 7
+    monkeypatch.setattr(pensar, "FILAS_POR_BLOQUE", 1000)  # varios bloques
+    por_bloques = pensador._valor_siguiente(casillas, 2)
+    if muestras <= 0:
+        dados, pesos = np.array(pensar.MULTICONJUNTOS), pensar.PROB_INICIAL
+    else:
+        rng = np.random.default_rng([pensador.semilla, 2])
+        dados = rng.integers(1, 7, size=(muestras, 5))
+        pesos = np.full(muestras, 1 / muestras)
+    x = codificar_lote(casillas, dados, tiro=1, servido=True, turno=2)
+    with torch.no_grad():
+        red = pensador.red
+        v = red.valor(red.tronco(torch.from_numpy(x.reshape(-1, TAMANO_ESTADO)))).numpy()
+    directo = v.reshape(len(casillas), len(dados)) @ pesos
+    assert np.allclose(por_bloques, directo, atol=1e-5)

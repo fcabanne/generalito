@@ -22,6 +22,7 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import psutil
 
@@ -35,6 +36,7 @@ from generalito.recursos import ARCHIVO_PARAR, Limites, temperatura_gpu
 PAGINA = Path(__file__).with_name("pagina.html")
 MAX_PARTIDAS_EN_MEMORIA = 50
 TAMANOS_RED = (256, 512, 1024)
+MUESTRAS_DEFECTO = 32  # igual que en generalito/agente/pensar.py (no se importa: es pesado)
 LAMBDA_GAE_DEFECTO = 0.95  # los mismos valores por defecto que generalito-entrenar
 ENTROPIA_DEFECTO = 0.01
 
@@ -236,6 +238,7 @@ class Corridas:
         variedad = 0.15 if variedad in (None, "") else float(variedad)
         if not 0 <= variedad <= 1:
             raise ValueError("La variedad va de 0 a 1.")
+        muestras = muestras_pedidas(pedido)
         alumna = int(pedido.get("alumna_oculta") or 0)
         if alumna not in (0, *TAMANOS_RED):
             raise ValueError("La red alumna tiene que ser de 256, 512 o 1024.")
@@ -247,6 +250,7 @@ class Corridas:
             "--max-cpu", str(float(pedido.get("max_cpu", d.max_cpu_sistema))),
             "--partidas-ciclo", str(partidas),
             "--variedad", str(variedad),
+            "--muestras", str(muestras),
         ]  # fmt: skip
         provisoria = {
             "programa": "aprender",
@@ -258,6 +262,7 @@ class Corridas:
             "parametros": {
                 "partidas_ciclo": partidas,
                 "variedad": variedad,
+                "muestras": muestras,
                 "alumna_oculta": alumna,
             },
             "limites": {"max_partidas": None, "max_minutos": minutos},
@@ -385,7 +390,7 @@ class Corridas:
         # Pensar es mucho más lento: por defecto, menos partidas
         defecto = 500 if examen or any(pensar) else 2000
         partidas = min(20_000, max(10, int(pedido.get("partidas") or defecto)))
-        muestras = min(252, max(0, int(pedido.get("muestras", 32))))
+        muestras = muestras_pedidas(pedido)
         d = Limites()
         args = [tipo, "--partidas", str(partidas), "--muestras", str(muestras)]
         args += ["--hilos", str(int(pedido.get("hilos", d.hilos_cpu)))]
@@ -408,6 +413,7 @@ class Corridas:
             "jugador": " vs ".join(nombres),
             "nombres": nombres,
             "pensar": pensar,
+            "muestras": muestras,
             "examen": examen,
             "limites": {"max_partidas": None, "max_minutos": 30},
         }
@@ -563,15 +569,16 @@ class Catalogo:
             self._cache.update(clave=clave, red=red, metricas=metricas, nombre=modelo["nombre"])
         return self._cache["red"]
 
-    def pensador_activo(self):
+    def pensador_activo(self, muestras: int = MUESTRAS_DEFECTO):
         """El modelo activo, pero pensando el turno (ver generalito/agente/pensar.py)."""
         red = self.red_activa()
-        if "pensador" not in self._cache:
+        clave = ("pensador", muestras)
+        if clave not in self._cache:
             from generalito.agente.pensar import Pensador
 
             objetivo = (self._cache.get("metricas") or {}).get("entrenamiento", {}).get("objetivo")
-            self._cache["pensador"] = Pensador(red, objetivo)
-        return self._cache["pensador"]
+            self._cache[clave] = Pensador(red, objetivo, muestras=muestras)
+        return self._cache[clave]
 
     def resumen(self) -> dict:
         lista = self.lista()
@@ -586,7 +593,18 @@ def _elegir(red, partida) -> int:
     return elegir(red, partida)
 
 
-def sugerencia(mesa: Mesa, catalogo: Catalogo, pensar: bool = False) -> dict:
+def muestras_pedidas(pedido: dict) -> int:
+    """Tiradas que imagina al pensar: 32 al azar, o 0 = las 252 con su probabilidad exacta."""
+    muestras = pedido.get("muestras")
+    muestras = MUESTRAS_DEFECTO if muestras in (None, "") else int(muestras)
+    if muestras not in (0, MUESTRAS_DEFECTO):
+        raise ValueError("Las tiradas al pensar son 32 al azar o todas las 252.")
+    return muestras
+
+
+def sugerencia(
+    mesa: Mesa, catalogo: Catalogo, pensar: bool = False, muestras: int = MUESTRAS_DEFECTO
+) -> dict:
     partida = mesa.juego.partida
     if not catalogo.lista():
         return {"opciones": []}
@@ -595,7 +613,7 @@ def sugerencia(mesa: Mesa, catalogo: Catalogo, pensar: bool = False) -> dict:
     if pensar:
         import time
 
-        pensador = catalogo.pensador_activo()
+        pensador = catalogo.pensador_activo(muestras)
         inicio = time.perf_counter()
         opciones = pensador.opciones(partida)[:3]
         unidad = "%" if pensador.objetivo.get("tipo") == "superar" else "pts"
@@ -701,8 +719,10 @@ def crear_servidor(
             ):
                 if mesa := self._mesa(partes[2]):
                     with mesa.lock:
-                        pensar = "pensar=1" in self.path
-                        self._responder(sugerencia(mesa, catalogo, pensar))
+                        consulta = parse_qs(urlsplit(self.path).query)
+                        pensar = consulta.get("pensar") == ["1"]
+                        muestras = muestras_pedidas({"muestras": consulta.get("muestras", [""])[0]})
+                        self._responder(sugerencia(mesa, catalogo, pensar, muestras))
             elif len(partes) == 3 and partes[:2] == ["api", "partidas"]:
                 if mesa := self._mesa(partes[2]):
                     self._responder(mesa.estado())
@@ -727,7 +747,7 @@ def crear_servidor(
                             mesa.jugar_al_azar(pedido.get("hasta", "jugada"))
                         elif partes[3] == "modelo":
                             if pedido.get("pensar"):
-                                pensador = catalogo.pensador_activo()
+                                pensador = catalogo.pensador_activo(muestras_pedidas(pedido))
                                 elegir = pensador.elegir
                             else:
                                 red = catalogo.red_activa()

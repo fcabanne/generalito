@@ -122,6 +122,14 @@ def test_modelos_con_nombre(tmp_path):
         assert s["pensando"] and len(s["opciones"]) == 3 and s["unidad"] == "pts"
         _, p = pedir(url, f"/api/partidas/{p['id']}/modelo", {"hasta": "turno", "pensar": True})
         assert p["turno"] == 2
+        # Con las 252 tiradas exactas
+        _, s = pedir(url, f"/api/partidas/{p['id']}/sugerencia?pensar=1&muestras=0")
+        assert s["pensando"] and len(s["opciones"]) == 3
+        ruta = f"/api/partidas/{p['id']}/modelo"
+        _, p = pedir(url, ruta, {"hasta": "turno", "pensar": True, "muestras": 0})
+        assert p["turno"] == 3
+        codigo, _ = pedir(url, ruta, {"hasta": "turno", "pensar": True, "muestras": 7})
+        assert codigo == 400
         mismo = {"tipo": "comparar", "modelos": ["modelo-v1", "modelo-v1"]}
         codigo, _ = pedir(url, "/api/analisis", mismo)
         assert codigo == 400  # el mismo modelo, sin pensar en los dos lados
@@ -151,14 +159,18 @@ def test_modelos_con_nombre(tmp_path):
         proceso = servidor.corridas.procesos[r["nombre"]]
         assert proceso.args[proceso.args.index("-m") + 1] == "generalito.agente.aprender"
         assert proceso.args[proceso.args.index("--partidas-ciclo") + 1] == "50"
+        assert proceso.args[proceso.args.index("--muestras") + 1] == "32"
         proceso.terminate()
         proceso.wait(timeout=30)
         codigo, _ = pedir(url, "/api/entrenamientos", {**aprender, "alumna_oculta": 300})
         assert codigo == 400
-        codigo, r = pedir(url, "/api/entrenamientos", {**aprender, "alumna_oculta": 512})
+        codigo, r = pedir(
+            url, "/api/entrenamientos", {**aprender, "alumna_oculta": 512, "muestras": 0}
+        )
         assert codigo == 200
         proceso = servidor.corridas.procesos[r["nombre"]]
         assert proceso.args[proceso.args.index("--alumna-oculta") + 1] == "512"
+        assert proceso.args[proceso.args.index("--muestras") + 1] == "0"
         proceso.terminate()
         proceso.wait(timeout=30)
 

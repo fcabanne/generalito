@@ -194,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
                     "modo": "aprender_pensando",
                     "objetivo": objetivo,
                     "oculta": red.oculta,
+                    "variedad": args.variedad,
+                    "muestras": args.muestras,
                 },
                 "pistas": pistas,
             }
